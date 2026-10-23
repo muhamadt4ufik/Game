@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tembak Pesawat Luar Angkasa</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&display=swap">
+<style>
+:root{--bg:#070914;--ink:#e8ecff;--dim:#8a93c2;--hot:#ff7a3d;--cool:#4fe3ff;--panel:rgba(10,14,34,.82);color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:"Chakra Petch",system-ui,sans-serif;overflow:hidden;touch-action:none;user-select:none}
+#stage{position:fixed;inset:0}
+canvas{display:block;width:100%;height:100%}
+#hud{position:fixed;left:0;right:0;top:env(safe-area-inset-top,0px);display:flex;justify-content:space-between;padding:14px 18px;font-size:clamp(16px,3.4vw,24px);font-weight:700;pointer-events:none}
+#hud span small{display:block;font-size:.55em;font-weight:500;color:var(--dim)}
+#lives{color:var(--hot);letter-spacing:.15em}
+#ov{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(5,7,18,.55);padding:20px}
+#card{background:var(--panel);border:2px solid var(--cool);padding:28px 32px;max-width:420px;text-align:center;border-radius:4px 22px 4px 22px}
+#card h1{margin:0 0 8px;font-size:clamp(26px,6vw,38px);line-height:1.1;color:var(--cool)}
+#card p{margin:6px 0;color:var(--dim);line-height:1.5}
+#card b{color:var(--ink)}
+button{margin-top:16px;font:inherit;font-weight:700;font-size:18px;padding:12px 30px;background:var(--hot);color:#1a0c04;border:0;border-radius:4px 14px 4px 14px;cursor:pointer}
+button:focus-visible{outline:3px solid var(--cool);outline-offset:3px}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="hud"><span id="sc">0<small>Skor</small></span><span id="lives"></span><span id="bs">0<small>Terbaik</small></span></div>
+<div id="ov"><div id="card">
+<h1 id="ttl">Tembak Pesawat Luar Angkasa</h1>
+<p id="msg">Gerakkan <b>mouse</b> atau <b>sentuh layar</b> untuk mengarahkan pesawat. Bisa juga pakai <b>panah / WASD</b>. Tembakan keluar otomatis.</p>
+<p>Hancurkan pesawat musuh. Yang merah jatuh dengan 1 tembakan, yang ungu besar butuh 3. Hindari tabrakan.</p>
+<button id="go">Mulai main</button>
+</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+const T=THREE, BX=11, BY=6;
+const stage=document.getElementById('stage');
+const renderer=new T.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+stage.appendChild(renderer.domElement);
+const scene=new T.Scene();
+scene.background=new T.Color(0x070914);
+scene.fog=new T.Fog(0x070914,60,170);
+const cam=new T.PerspectiveCamera(60,1,.1,300);
+cam.position.set(0,1.5,14);
+scene.add(new T.AmbientLight(0x6670a8,.9));
+const sun=new T.DirectionalLight(0xffffff,1.1);sun.position.set(5,10,8);scene.add(sun);
+
+function resize(){const w=innerWidth,h=innerHeight;renderer.setSize(w,h);cam.aspect=w/h;cam.fov=w/h<.8?75:60;cam.updateProjectionMatrix();}
+addEventListener('resize',resize);resize();
+
+// Bintang
+const N=900,sp=new Float32Array(N*3);
+for(let i=0;i<N;i++){sp[i*3]=(Math.random()-.5)*160;sp[i*3+1]=(Math.random()-.5)*100;sp[i*3+2]=-200+Math.random()*220;}
+const sg=new T.BufferGeometry();sg.setAttribute('position',new T.BufferAttribute(sp,3));
+scene.add(new T.Points(sg,new T.PointsMaterial({color:0xbfd0ff,size:.5,sizeAttenuation:true})));
+
+// Pesawat pemain
+const ship=new T.Group();
+function wingGeo(p){const s=new T.Shape();s.moveTo(p[0][0],p[0][1]);for(let i=1;i<p.length;i++)s.lineTo(p[i][0],p[i][1]);return new T.ExtrudeGeometry(s,{depth:.12,bevelEnabled:false});}
+const hullM=new T.MeshStandardMaterial({color:0xcfd8ff,emissive:0x1a2350,flatShading:true,metalness:.5,roughness:.4,side:T.DoubleSide});
+const accM=new T.MeshStandardMaterial({color:0x4fe3ff,emissive:0x0b6a80,flatShading:true,side:T.DoubleSide});
+const darkM=new T.MeshStandardMaterial({color:0x1b2147,flatShading:true});
+const glassM=new T.MeshBasicMaterial({color:0x7ff0ff});
+const flames=[];
+ship.add(new T.Mesh(new T.CylinderGeometry(.1,.55,3.8,8).rotateX(-Math.PI/2),hullM));
+const wGeo=wingGeo([[.35,.6],[3.0,-1.3],[3.0,-1.9],[.35,-1.7]]).rotateX(-Math.PI/2);
+const wR=new T.Mesh(wGeo,hullM);wR.position.y=-.06;ship.add(wR);
+const wL=new T.Mesh(wGeo,hullM);wL.position.y=-.06;wL.scale.x=-1;ship.add(wL);
+const cGeo=wingGeo([[.3,.2],[1.5,-.5],[1.5,-.9],[.3,-.9]]).rotateX(-Math.PI/2);
+[1,-1].forEach(s=>{
+  const c=new T.Mesh(cGeo,accM);c.position.set(0,-.06,-1.1);c.scale.x=s;ship.add(c);
+  const tip=new T.Mesh(new T.BoxGeometry(.08,.8,1.1),accM);tip.position.set(3.0*s,.35,1.0);ship.add(tip);
+  const eng=new T.Mesh(new T.CylinderGeometry(.24,.3,1.4,8).rotateX(Math.PI/2),darkM);eng.position.set(.6*s,-.05,1.5);ship.add(eng);
+  const fl=new T.Mesh(new T.ConeGeometry(.24,1.3,8),new T.MeshBasicMaterial({color:0xff9a4d}));fl.rotation.x=Math.PI/2;fl.position.set(.6*s,-.05,2.8);ship.add(fl);flames.push(fl);
+});
+const cock=new T.Mesh(new T.SphereGeometry(.4,12,10),glassM);cock.scale.set(.9,.7,2.0);cock.position.set(0,.38,-.3);ship.add(cock);
+const fin=new T.Mesh(new T.BoxGeometry(.1,.8,1.1),hullM);fin.position.set(0,.45,1.3);ship.add(fin);
+const stripe=new T.Mesh(new T.BoxGeometry(.14,.06,1.8),accM);stripe.position.set(0,.3,.9);ship.add(stripe);
+ship.scale.setScalar(.65);
+scene.add(ship);
+
+// Bahan
+const foeM=new T.MeshStandardMaterial({color:0xe0452f,emissive:0x5a1208,flatShading:true,metalness:.4,roughness:.5,side:T.DoubleSide});
+const heavyM=new T.MeshStandardMaterial({color:0x8a2fd0,emissive:0x2a0a50,flatShading:true,metalness:.4,roughness:.5,side:T.DoubleSide});
+const foeDarkM=new T.MeshStandardMaterial({color:0x241528,flatShading:true});
+const eyeM=new T.MeshBasicMaterial({color:0xffe14d});
+const glowM=new T.MeshBasicMaterial({color:0xff9a4d});
+const bulM=new T.MeshBasicMaterial({color:0xfff2a0});
+const bulG=new T.BoxGeometry(.14,.14,1.6);
+const spG=new T.SphereGeometry(.18,6,6);
+const sparkMats={o:new T.MeshBasicMaterial({color:0xff9a4d,transparent:true}),c:new T.MeshBasicMaterial({color:0x4fe3ff,transparent:true})};
+
+let bullets=[],enemies=[],sparks=[];
+const eWing=wingGeo([[.3,.5],[2.4,-1.0],[2.4,-1.6],[.3,-1.2]]).rotateX(Math.PI/2);
+const eBody=new T.CylinderGeometry(.1,.55,3.2,6).rotateX(Math.PI/2);
+const eCannon=new T.CylinderGeometry(.16,.16,2.2,6).rotateX(Math.PI/2);
+function makeEnemy(heavy){
+  const g=new T.Group(),k=heavy?1.5:1,m=heavy?heavyM:foeM;
+  g.add(new T.Mesh(eBody,m));
+  [1,-1].forEach(s=>{
+    const w=new T.Mesh(eWing,m);w.scale.set(s*k,1,k);g.add(w);
+    const tip=new T.Mesh(new T.BoxGeometry(.08,.7*k,1.0*k),foeDarkM);tip.position.set(2.4*k*s,0,-1.2*k);g.add(tip);
+    if(heavy){const c=new T.Mesh(eCannon,foeDarkM);c.position.set(1.4*s,-.1,.9);g.add(c);}
+  });
+  const eye=new T.Mesh(new T.SphereGeometry(.28*k,10,8),eyeM);eye.scale.z=1.6;eye.position.set(0,.3*k,.3*k);g.add(eye);
+  const eng=new T.Mesh(new T.SphereGeometry(.3*k,8,8),glowM);eng.position.z=-1.7*k;g.add(eng);
+  g.userData=heavy?{hp:3,pts:250,r:3.0,type:'h'}:{hp:1,pts:100,r:1.9,type:'d'};
+  return g;
+}
+function burst(p,k,n){
+  for(let i=0;i<n;i++){
+    const m=new T.Mesh(spG,sparkMats[k].clone());m.position.copy(p);
+    m.userData={v:new T.Vector3(Math.random()-.5,Math.random()-.5,Math.random()-.5).normalize().multiplyScalar(6+Math.random()*10),life:.7};
+    scene.add(m);sparks.push(m);
+  }
+}
+
+// Status
+let state='menu',score=0,lives=3,t=0,fireT=0,spawnT=0,inv=0,shake=0;
+let best=0;try{best=+localStorage.getItem('tpl-best')||0}catch(e){}
+const $=id=>document.getElementById(id);
+function hud(){$('sc').firstChild.nodeValue=score;$('bs').firstChild.nodeValue=Math.max(best,score);$('lives').textContent='♥'.repeat(Math.max(lives,0));}
+
+// Input
+const target=new T.Vector2(0,0);const keys={};
+function pointer(x,y){target.set((x/innerWidth-.5)*2*BX,-(y/innerHeight-.5)*2*BY*1.3);}
+addEventListener('pointermove',e=>pointer(e.clientX,e.clientY));
+addEventListener('pointerdown',e=>pointer(e.clientX,e.clientY));
+addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=1;});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=0;});
+
+function clearAll(){[...bullets,...enemies,...sparks].forEach(o=>scene.remove(o));bullets=[];enemies=[];sparks=[];}
+function start(){
+  clearAll();score=0;lives=3;t=0;spawnT=1;inv=0;shake=0;target.set(0,0);ship.position.set(0,0,0);ship.visible=true;
+  state='play';$('ov').classList.add('hide');hud();
+}
+$('go').addEventListener('click',start);
+addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&state!=='play'&&document.activeElement!==$('go')){start();}});
+
+function over(){
+  state='over';
+  if(score>best){best=score;try{localStorage.setItem('tpl-best',best)}catch(e){}}
+  $('ttl').textContent='Pesawat hancur';
+  $('msg').innerHTML='Skor kamu <b>'+score+'</b>. Skor terbaik <b>'+best+'</b>.';
+  $('go').textContent='Main lagi';
+  $('ov').classList.remove('hide');hud();
+}
+
+function shoot(){
+  [-.7,.7].forEach(dx=>{
+    const b=new T.Mesh(bulG,bulM);b.position.set(ship.position.x+dx,ship.position.y,-1.4);scene.add(b);bullets.push(b);
+  });
+}
+
+function spawn(){
+  const e=makeEnemy(Math.random()>=.7);
+  e.position.set((Math.random()*2-1)*BX,(Math.random()*2-1)*BY,-150);
+  e.userData.base=e.position.x;e.userData.ph=Math.random()*6;
+  e.userData.spd=(e.userData.type==='h'?.7:1)*(26+Math.min(t*.6,30))+Math.random()*8;
+  scene.add(e);enemies.push(e);
+}
+
+function hitPlayer(){
+  if(inv>0)return;
+  lives--;inv=1.6;shake=.6;burst(ship.position,'c',18);hud();
+  if(lives<=0){burst(ship.position,'o',30);ship.visible=false;over();}
+}
+
+const clock=new T.Clock();
+function tick(){
+  requestAnimationFrame(tick);
+  const dt=Math.min(clock.getDelta(),.05);
+  // bintang
+  const s=sg.attributes.position;
+  const sv=(state==='play'?60:25)*dt;
+  for(let i=0;i<N;i++){let z=s.array[i*3+2]+sv;if(z>20)z-=220;s.array[i*3+2]=z;}
+  s.needsUpdate=true;
+
+  if(state==='play'){
+    t+=dt;
+    const kx=(keys.arrowright||keys.d?1:0)-(keys.arrowleft||keys.a?1:0);
+    const ky=(keys.arrowup||keys.w?1:0)-(keys.arrowdown||keys.s?1:0);
+    if(kx||ky){target.x+=kx*20*dt;target.y+=ky*14*dt;}
+    target.x=Math.max(-BX,Math.min(BX,target.x));target.y=Math.max(-BY,Math.min(BY,target.y));
+    const px=ship.position.x;
+    ship.position.x+=(target.x-ship.position.x)*Math.min(1,dt*10);
+    ship.position.y+=(target.y-ship.position.y)*Math.min(1,dt*10);
+    ship.rotation.z=-(ship.position.x-px)*5*(dt?1:0)*Math.min(1,dt*60)*.5;
+    ship.rotation.z=Math.max(-.7,Math.min(.7,ship.rotation.z));
+    flames.forEach(f=>{f.scale.y=.8+Math.random()*.6;});
+    inv=Math.max(0,inv-dt);ship.visible=inv<=0||Math.floor(inv*12)%2===0;
+
+    fireT-=dt;if(fireT<=0){shoot();fireT=.17;}
+    spawnT-=dt;if(spawnT<=0){spawn();spawnT=Math.max(.3,1.0-t*.012);}
+
+    for(const b of bullets)b.position.z-=110*dt;
+    for(const e of enemies){
+      e.position.z+=e.userData.spd*dt;
+      const fw=e.userData.type==='d'?1.6:.8,am=e.userData.type==='d'?3:2;
+      e.position.x=e.userData.base+Math.sin(t*fw+e.userData.ph)*am;e.rotation.z=Math.sin(t*fw+e.userData.ph)*.5;
+    }
+    // tabrakan
+    for(const e of enemies){
+      if(e.userData.dead)continue;
+      for(const b of bullets){
+        if(b.userData.dead)continue;
+        if(Math.abs(b.position.z-e.position.z)<1.8&&Math.hypot(b.position.x-e.position.x,b.position.y-e.position.y)<e.userData.r){
+          b.userData.dead=1;e.userData.hp--;burst(b.position,'o',3);
+          if(e.userData.hp<=0){e.userData.dead=1;score+=e.userData.pts;burst(e.position,'o',16);hud();}
+          break;
+        }
+      }
+      if(!e.userData.dead&&e.position.z>-1.5&&e.position.z<2&&Math.hypot(e.position.x-ship.position.x,e.position.y-ship.position.y)<e.userData.r+.7){
+        e.userData.dead=1;burst(e.position,'o',16);hitPlayer();
+      }
+    }
+    bullets=bullets.filter(b=>{if(b.userData.dead||b.position.z<-160){scene.remove(b);return false}return true;});
+    enemies=enemies.filter(e=>{if(e.userData.dead||e.position.z>8){scene.remove(e);return false}return true;});
+  }
+
+  for(const p of sparks){p.position.addScaledVector(p.userData.v,dt);p.userData.life-=dt;p.material.opacity=Math.max(0,p.userData.life/.7);}
+  sparks=sparks.filter(p=>{if(p.userData.life<=0){scene.remove(p);p.material.dispose();return false}return true;});
+
+  shake=Math.max(0,shake-dt);
+  cam.position.x=ship.position.x*.35+(shake?(Math.random()-.5)*shake:0);
+  cam.position.y=1.5+ship.position.y*.35+(shake?(Math.random()-.5)*shake:0);
+  cam.lookAt(ship.position.x*.15,ship.position.y*.15,-20);
+  renderer.render(scene,cam);
+}
+hud();tick();
+})();
+</script>
+</body>
+</html>
