@@ -1,0 +1,3038 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jelajah Angkasa — Misi Taufik</title>
+  <meta name="description" content="Game 3D jelajah angkasa: Astronot Taufik menjelajahi planet-planet Tata Surya dengan pesawat ulang-alik canggih.">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      overflow: hidden;
+      color: #eaf4ff;
+      background: #000;
+      font-family: 'Inter', Arial, sans-serif;
+    }
+
+    canvas { display: block; }
+
+    /* ── Loading Screen ── */
+    #loading {
+      position: fixed; inset: 0; z-index: 1000;
+      background: radial-gradient(ellipse at 50% 40%, #0a1628 0%, #020408 70%);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      transition: opacity 1s ease;
+    }
+    #loading.fade { opacity: 0; pointer-events: none; }
+    #loading h1 {
+      font-family: 'Orbitron', sans-serif; font-weight: 900;
+      font-size: clamp(22px, 5vw, 48px); letter-spacing: 3px;
+      background: linear-gradient(135deg, #5bf1ff, #8b6cff, #ff6baa);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      margin-bottom: 12px; text-align: center;
+    }
+    #loading p { color: #7ba5cf; font-size: 14px; margin-bottom: 30px; }
+    .loader-bar {
+      width: min(320px, 80vw); height: 4px;
+      background: rgba(255,255,255,.08); border-radius: 4px; overflow: hidden;
+    }
+    .loader-bar-inner {
+      width: 0%; height: 100%;
+      background: linear-gradient(90deg, #5bf1ff, #8b6cff);
+      border-radius: 4px; transition: width .3s;
+    }
+
+    /* ── HUD ── */
+    #hud {
+      position: fixed; inset: 0; pointer-events: none; z-index: 10;
+    }
+
+    .panel {
+      background: rgba(5, 12, 35, .78);
+      border: 1px solid rgba(100, 180, 255, .18);
+      border-radius: 14px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.05);
+      backdrop-filter: blur(12px);
+    }
+
+    #topbar {
+      position: absolute; top: 12px; left: 12px; right: 12px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; padding: 12px 18px;
+      background: rgba(5, 12, 35, .85);
+      border-bottom: 1px solid rgba(91, 241, 255, .12);
+    }
+
+    #title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: clamp(12px, 2.5vw, 18px);
+      font-weight: 700; letter-spacing: 1.5px;
+      background: linear-gradient(90deg, #5bf1ff, #c49fff);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+
+    .topbar-right {
+      display: flex; align-items: center; gap: 12px;
+    }
+
+    .sound-btn {
+      background: rgba(91, 241, 255, .1);
+      border: 1px solid rgba(91, 241, 255, .3);
+      color: #5bf1ff;
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 11px;
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700;
+      letter-spacing: .5px;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: all .2s;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .sound-btn:hover {
+      background: rgba(91, 241, 255, .25);
+      border-color: #5bf1ff;
+      box-shadow: 0 0 12px rgba(91, 241, 255, .4);
+    }
+    .sound-btn.muted {
+      color: #ff7788;
+      border-color: rgba(255, 119, 136, .4);
+      background: rgba(255, 119, 136, .1);
+    }
+
+    #fuel-bar-container {
+      width: 120px; height: 6px; background: rgba(255,255,255,.06);
+      border-radius: 4px; overflow: hidden;
+    }
+    #fuel-bar {
+      width: 100%; height: 100%;
+      background: linear-gradient(90deg, #00e5ff, #76ff03);
+      border-radius: 4px; transition: width .5s;
+    }
+
+    #status {
+      color: #8ec5f5; font-size: 12px; text-align: right;
+      max-width: 280px;
+    }
+
+    /* ── Left Panel ── */
+    #leftPanel {
+      position: absolute; top: 80px; left: 12px;
+      width: 210px; padding: 14px;
+      pointer-events: auto; max-height: calc(100vh - 200px);
+      overflow-y: auto;
+    }
+    #leftPanel::-webkit-scrollbar { width: 3px; }
+    #leftPanel::-webkit-scrollbar-thumb { background: rgba(91,241,255,.2); border-radius: 3px; }
+
+    #leftPanel h3 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 11px; font-weight: 700;
+      color: #5bf1ff; letter-spacing: 1px;
+      margin-bottom: 10px; text-transform: uppercase;
+    }
+
+    .planetBtn {
+      width: 100%; color: #d0e8ff;
+      background: rgba(30, 60, 110, .4);
+      border: 1px solid rgba(91, 241, 255, .1);
+      border-radius: 10px; padding: 10px 12px;
+      margin: 3px 0; cursor: pointer;
+      text-align: left; font-size: 12px;
+      font-family: 'Inter', sans-serif;
+      transition: all .25s ease;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .planetBtn:hover {
+      background: rgba(91, 241, 255, .12);
+      border-color: rgba(91, 241, 255, .35);
+      transform: translateX(3px);
+      color: #fff;
+    }
+    .planetBtn:disabled {
+      opacity: .35; cursor: not-allowed; transform: none;
+    }
+    .planetBtn .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      display: inline-block; flex-shrink: 0;
+    }
+
+    /* ── Info Panel ── */
+    #info {
+      position: absolute; top: 80px; right: 12px;
+      width: min(340px, calc(100vw - 240px));
+      padding: 16px; display: none;
+      font-size: 13px; line-height: 1.55;
+      pointer-events: auto;
+      max-height: calc(100vh - 200px); overflow-y: auto;
+    }
+    #info::-webkit-scrollbar { width: 3px; }
+    #info::-webkit-scrollbar-thumb { background: rgba(91,241,255,.2); border-radius: 3px; }
+    #info h3 {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 12px; font-weight: 700;
+      color: #5bf1ff; margin-bottom: 10px;
+      letter-spacing: .5px;
+    }
+    #info p { margin: 6px 0; color: #b0cfec; }
+    #info a { color: #5bf1ff; text-decoration: none; }
+    #info a:hover { text-decoration: underline; }
+
+    .stat-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 6px; margin: 10px 0;
+    }
+    .stat-item {
+      background: rgba(91,241,255,.05);
+      border: 1px solid rgba(91,241,255,.08);
+      border-radius: 8px; padding: 8px 10px;
+      font-size: 11px;
+    }
+    .stat-item .label { color: #6a9ec5; font-size: 10px; }
+    .stat-item .value { color: #e0f0ff; font-weight: 600; margin-top: 2px; }
+
+    /* ── Dialog ── */
+    #dialog {
+      position: absolute; bottom: 90px; left: 50%;
+      transform: translateX(-50%);
+      width: min(700px, calc(100vw - 30px));
+      padding: 20px 24px; display: none;
+      line-height: 1.6; font-size: 14px;
+      pointer-events: auto;
+      border: 1px solid rgba(255, 100, 100, .2);
+      animation: dialogPulse 3s ease infinite;
+    }
+    @keyframes dialogPulse {
+      0%, 100% { box-shadow: 0 0 20px rgba(255,80,80,.08); }
+      50% { box-shadow: 0 0 40px rgba(255,80,80,.18); }
+    }
+    #dialog .speaker {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 10px;
+    }
+    #dialog .speaker-icon {
+      width: 36px; height: 36px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      background: rgba(255,80,80,.15);
+      border: 1px solid rgba(255,80,80,.3);
+    }
+    #dialog .speaker-name {
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 700; font-size: 14px;
+      color: #ff8a8a;
+    }
+    #dialog .alien-text {
+      color: #d4e8f8;
+      font-size: 13.5px;
+      line-height: 1.6;
+    }
+    .tts-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; margin-top: 12px; padding: 8px 12px;
+      background: rgba(15, 25, 45, .8);
+      border: 1px solid rgba(255, 100, 100, .25);
+      border-radius: 8px; flex-wrap: wrap;
+    }
+    .tts-status-box {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 11px; color: #7ba5cf;
+    }
+    .tts-pulse {
+      display: inline-block; width: 8px; height: 8px;
+      border-radius: 50%; background: #ff4d6d;
+      box-shadow: 0 0 8px #ff4d6d;
+      animation: pulseDot 1s infinite alternate;
+    }
+    @keyframes pulseDot {
+      from { opacity: 0.3; transform: scale(0.8); }
+      to { opacity: 1; transform: scale(1.3); }
+    }
+    .tts-actions {
+      display: flex; gap: 6px;
+    }
+    .tts-btn {
+      background: rgba(255, 80, 80, .15);
+      border: 1px solid rgba(255, 80, 80, .4);
+      color: #ff9e9e;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: all .2s;
+    }
+    .tts-btn:hover {
+      background: rgba(255, 80, 80, .35);
+      color: #fff;
+      box-shadow: 0 0 10px rgba(255, 80, 80, .3);
+    }
+    #dialog .note {
+      margin-top: 10px; padding-top: 8px;
+      border-top: 1px solid rgba(255,255,255,.06);
+      color: #6a9ec5; font-size: 11px;
+    }
+    #dialog .close-btn {
+      position: absolute; top: 12px; right: 14px;
+      background: none; border: none; color: #6a9ec5;
+      cursor: pointer; font-size: 18px; pointer-events: auto;
+      transition: color .2s;
+    }
+    #dialog .close-btn:hover { color: #ff6b6b; }
+
+    /* ── Toast ── */
+    #toast {
+      position: absolute; left: 50%; top: 72px;
+      transform: translateX(-50%);
+      padding: 10px 18px;
+      background: rgba(5, 15, 40, .92);
+      border: 1px solid rgba(91, 241, 255, .2);
+      border-radius: 24px; font-size: 13px;
+      display: none; white-space: nowrap;
+      animation: toastIn .3s ease;
+    }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+      to { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    /* ── Bottom Bar ── */
+    #bottom {
+      position: absolute; bottom: 12px; left: 12px; right: 12px;
+      display: flex; justify-content: space-between; align-items: end;
+      gap: 10px;
+    }
+
+    #controls {
+      padding: 12px 16px; font-size: 11px; line-height: 1.6;
+      color: #7ba5cf; max-width: 55%;
+    }
+    #controls b { color: #5bf1ff; }
+    #controls kbd {
+      display: inline-block; background: rgba(91,241,255,.1);
+      border: 1px solid rgba(91,241,255,.15); border-radius: 4px;
+      padding: 1px 6px; font-size: 10px; color: #5bf1ff;
+      font-family: 'Orbitron', monospace;
+    }
+
+    #actions {
+      padding: 12px 14px; pointer-events: auto;
+      min-width: 180px;
+    }
+
+    button.action {
+      width: 100%; color: #fff;
+      background: linear-gradient(135deg, rgba(91,241,255,.15), rgba(139,108,255,.15));
+      border: 1px solid rgba(91,241,255,.25);
+      border-radius: 10px; padding: 11px 14px;
+      cursor: pointer; text-align: center;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 11px; font-weight: 700;
+      letter-spacing: .5px;
+      transition: all .25s ease;
+    }
+    button.action:hover {
+      background: linear-gradient(135deg, rgba(91,241,255,.25), rgba(139,108,255,.25));
+      border-color: rgba(91,241,255,.5);
+      box-shadow: 0 0 20px rgba(91,241,255,.15);
+    }
+
+    button.action-secondary {
+      width: 100%; color: #8ec5f5;
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 8px; padding: 8px 12px;
+      cursor: pointer; text-align: center;
+      font-family: 'Inter', sans-serif;
+      font-size: 11px; margin-top: 6px;
+      transition: all .2s ease;
+    }
+    button.action-secondary:hover {
+      background: rgba(255,100,100,.1);
+      border-color: rgba(255,100,100,.25);
+      color: #ffaaaa;
+    }
+
+    /* ── Mobile Touch ── */
+    #touchControls {
+      display: none;
+      position: absolute; bottom: 80px; left: 14px;
+      pointer-events: auto;
+    }
+    .touch-btn {
+      width: 48px; height: 48px; border-radius: 50%;
+      background: rgba(91,241,255,.12);
+      border: 1px solid rgba(91,241,255,.2);
+      color: #5bf1ff; font-size: 18px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    .touch-grid {
+      display: grid;
+      grid-template-areas: ". up ." "left . right" ". down .";
+      grid-template-columns: 52px 52px 52px;
+      grid-template-rows: 52px 52px 52px;
+      gap: 2px;
+    }
+    .touch-grid .up { grid-area: up; }
+    .touch-grid .down { grid-area: down; }
+    .touch-grid .left { grid-area: left; }
+    .touch-grid .right { grid-area: right; }
+
+    /* ── Speed Lines Overlay ── */
+    #speedLines {
+      position: fixed; inset: 0; pointer-events: none; z-index: 5;
+      opacity: 0; transition: opacity .5s;
+    }
+
+    @media (max-width: 700px) {
+      #leftPanel { width: 160px; padding: 10px; top: 74px; }
+      .planetBtn { padding: 8px 10px; font-size: 11px; }
+      #topbar { padding: 10px 14px; }
+      #status { font-size: 10px; max-width: 150px; }
+      #controls { max-width: 50%; font-size: 9px; padding: 8px 10px; }
+      #actions { min-width: 150px; }
+      #info { top: auto; bottom: 160px; width: min(300px, calc(100vw - 24px)); }
+      #touchControls { display: block; }
+      #fuel-bar-container { width: 60px; }
+    }
+
+    @media (max-width: 400px) {
+      #leftPanel { width: 130px; }
+      #info { width: calc(100vw - 20px); }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Loading Screen -->
+  <div id="loading">
+    <h1>🚀 JELAJAH ANGKASA</h1>
+    <p>Misi Astronot Taufik</p>
+    <div class="loader-bar">
+      <div class="loader-bar-inner" id="loadBar"></div>
+    </div>
+  </div>
+
+  <!-- Speed Lines Canvas -->
+  <canvas id="speedLines"></canvas>
+
+  <!-- HUD -->
+  <div id="hud" style="display:none">
+    <div id="topbar" class="panel">
+      <div id="title">🚀 MISI TAUFIK</div>
+      <div id="fuel-bar-container" title="Bahan Bakar Pesawat">
+        <div id="fuel-bar"></div>
+      </div>
+      <div class="topbar-right">
+        <button id="soundToggleBtn" class="sound-btn" title="Aktifkan / Matikan Suara (M)">🔊 SUARA ON</button>
+        <div id="status">Menyiapkan pesawat ulang-alik...</div>
+      </div>
+    </div>
+
+    <div id="leftPanel" class="panel">
+      <h3>🪐 Tujuan Ekspedisi</h3>
+      <div id="planetList"></div>
+    </div>
+
+    <div id="info" class="panel"></div>
+    <div id="toast"></div>
+    <div id="dialog" class="panel"></div>
+
+    <div id="touchControls">
+      <div class="touch-grid">
+        <div class="touch-btn up" data-key="w">▲</div>
+        <div class="touch-btn left" data-key="a">◀</div>
+        <div class="touch-btn right" data-key="d">▶</div>
+        <div class="touch-btn down" data-key="s">▼</div>
+      </div>
+    </div>
+
+    <div id="bottom">
+      <div id="controls" class="panel">
+        <b>Kontrol:</b> Pilih planet untuk terbang · <kbd>E</kbd> mendarat / bicara ·
+        <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> berjalan ·
+        <kbd>Esc</kbd> tutup dialog · <kbd>R</kbd> kembali ke pesawat
+      </div>
+      <div id="actions" class="panel">
+        <button class="action" id="mainAction">PILIH PLANET</button>
+        <button class="action-secondary" id="returnBtn" style="display:none">↩ Kembali ke Orbit</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+
+    /* ═══════════════════════════════════════════
+       SCENE SETUP
+    ═══════════════════════════════════════════ */
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000005);
+
+    const camera = new THREE.PerspectiveCamera(
+      55, window.innerWidth / window.innerHeight, 0.1, 8000
+    );
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+
+    /* ═══════════════════════════════════════════
+       LIGHTING
+    ═══════════════════════════════════════════ */
+    const ambientLight = new THREE.AmbientLight(0x3a5070, 1.2);
+    scene.add(ambientLight);
+
+    const hemiLight = new THREE.HemisphereLight(0x88aadd, 0x445566, 0.8);
+    scene.add(hemiLight);
+
+    const sunLight = new THREE.PointLight(0xfff0d4, 4, 3000, 1.2);
+    sunLight.position.set(0, 0, 0);
+    sunLight.castShadow = true;
+    scene.add(sunLight);
+
+    const fillLight = new THREE.DirectionalLight(0x6699cc, 0.6);
+    fillLight.position.set(-100, 80, 100);
+    scene.add(fillLight);
+
+    const fillLight2 = new THREE.DirectionalLight(0x445588, 0.4);
+    fillLight2.position.set(100, 40, -80);
+    scene.add(fillLight2);
+
+    // Follow light - moves with shuttle or player
+    const followLight = new THREE.PointLight(0xffffff, 2.5, 80, 1.5);
+    followLight.position.set(0, 20, 0);
+    scene.add(followLight);
+
+    // Landing/walking area light
+    const landingLight = new THREE.PointLight(0xffffff, 0, 60, 1.5);
+    scene.add(landingLight);
+
+    /* ═══════════════════════════════════════════
+       PLANET DATA (NASA-referenced facts)
+    ═══════════════════════════════════════════ */
+    const planets = [
+      {
+        name: "Merkurius", size: 3.8, orbitRadius: 55, orbitSpeed: 0.48, color: 0x8c7c6a, type: "rock",
+        tilt: 0.034, rotSpeed: 0.004,
+        skyColor: 0x221d18, fogColor: 0x362c24, fogDensity: 0.006, sunLightColor: 0xfff4e6,
+        windProfile: { freq: 160, q: 1.0, gain: 0.04, rumble: 0.02, name: "Desis Radiasi Matahari Silau" },
+        stats: { diameter: "4.879 km", suhu: "-180°C ~ 430°C", gravitasi: "3.7 m/s²", hari: "59 hari Bumi" },
+        info: "Planet terkecil dan terdekat dari Matahari. Permukaannya penuh kawah akibat tumbukan asteroid selama miliaran tahun. Tidak punya atmosfer pelindung sehingga siang sangat panas (430°C) dan malam sangat dingin (-180°C). Merkurius memiliki inti besi besar yang membentuk ~85% radiusnya.",
+        alien: "BERHENTI, manusia kecil! Aku adalah Xarvok, Penjaga Kawah Merkurius! Lihatlah duniaku — permukaan penuh kawah yang menyimpan catatan kosmik dari masa awal Tata Surya. Di sini, siang hari bisa membakarmu hingga 430°C, dan malam hari akan membekukanmu sampai -180°C! Jangan kira kau bisa bertahan di sini. Di balik kawah-kawah ini tersimpan inti besi raksasa — harta karun yang takkan pernah bisa kau gali. Pergi sebelum rotasiku yang lambat membuat satu harimu menjadi 59 hari Bumi yang menyiksa!",
+        alienName: "Xarvok",
+        alienColor: 0x4a3a2a,
+        alienEyeColor: 0xff4400,
+        source: "https://solarsystem.nasa.gov/planets/mercury/overview/"
+      },
+      {
+        name: "Venus", size: 5.5, orbitRadius: 85, orbitSpeed: 0.35, color: 0xd4a24e, type: "venus",
+        tilt: 2.64, rotSpeed: -0.002,
+        skyColor: 0xd89f38, fogColor: 0xba8024, fogDensity: 0.018, sunLightColor: 0xffcc66,
+        windProfile: { freq: 280, q: 4.5, gain: 0.16, rumble: 0.12, name: "Desau Badai Asam Sulfat Pekat" },
+        stats: { diameter: "12.104 km", suhu: "~465°C", gravitasi: "8.87 m/s²", tekanan: "92× Bumi" },
+        info: "Venus diselimuti atmosfer karbon dioksida sangat tebal dengan awan asam sulfat. Efek rumah kaca yang ekstrem menjadikannya planet terpanas di Tata Surya (~465°C). Tekanan atmosfernya 92 kali Bumi — setara tekanan di kedalaman 900m di laut. Venus berotasi terbalik (retrograde) dan sangat lambat.",
+        alien: "Selamat datang di NERAKAKU, Taufik! Aku Sulfara, Ratu Awan Asam! Kau pikir planetmu panas? HA! Di sini suhunya 465°C — cukup untuk melelehkan timah dan seng! Atmosfer karbon dioksidaku begitu tebal, tekanannya 92 kali lipat Bumiku! Hujan asam sulfat turun dari awan-awanku, meski menguap sebelum menyentuh tanah. Ratusan gunung berapi tersebar di permukaanku. Dan yang paling menarik — aku berotasi TERBALIK! Matahari terbit di barat dan tenggelam di timur. Satu hariku setara 243 hari Bumi. Pergi dari sini sebelum atmosferku meremukkanmu!",
+        alienName: "Sulfara",
+        alienColor: 0x8a6520,
+        alienEyeColor: 0xffaa00,
+        source: "https://solarsystem.nasa.gov/planets/venus/overview/"
+      },
+      {
+        name: "Bumi", size: 5.8, orbitRadius: 120, orbitSpeed: 0.3, color: 0x2266bb, type: "earth",
+        tilt: 0.41, rotSpeed: 0.01,
+        skyColor: 0x64a9f8, fogColor: 0x98caff, fogDensity: 0.007, sunLightColor: 0xffffff,
+        windProfile: { freq: 380, q: 1.8, gain: 0.08, rumble: 0.03, name: "Semilir Angin Segar Bumi" },
+        stats: { diameter: "12.742 km", suhu: "-89°C ~ 57°C", gravitasi: "9.8 m/s²", satelit: "1 (Bulan)" },
+        info: "Rumah Taufik! Satu-satunya planet yang diketahui memiliki kehidupan. Memiliki air cair di permukaan, atmosfer kaya nitrogen-oksigen, medan magnet pelindung, dan keragaman hayati luar biasa. Bulan mengorbit Bumi dan memengaruhi pasang-surut laut.",
+        alien: "Halo, Taufik! Aku Gaia, Penjaga Bumi — rumahmu sendiri! Jangan anggap remeh duniamu. Air cair, udara yang bisa dihirup, medan magnet yang melindungimu dari radiasi Matahari — semua ini LANGKA di alam semesta! 71% permukaanku ditutupi air. Aku punya lautan yang dalamnya 11 km, gunung setinggi 8.8 km, dan jutaan spesies makhluk hidup. Tapi AWAS — sumber dayaku TIDAK tak terbatas! Hutan-hutanku semakin menipis, lautanku semakin hangat. Jagalah rumahmu, Taufik, sebelum terlambat!",
+        alienName: "Gaia",
+        alienColor: 0x2a5a3a,
+        alienEyeColor: 0x00ff88,
+        source: "https://science.nasa.gov/earth/facts/"
+      },
+      {
+        name: "Mars", size: 4.8, orbitRadius: 160, orbitSpeed: 0.24, color: 0xc04a28, type: "mars",
+        tilt: 0.44, rotSpeed: 0.009,
+        skyColor: 0xd67a50, fogColor: 0xbf5834, fogDensity: 0.009, sunLightColor: 0xffecd0,
+        windProfile: { freq: 440, q: 3.5, gain: 0.17, rumble: 0.09, name: "Deru Badai Pasir Karat Mars" },
+        stats: { diameter: "6.779 km", suhu: "-140°C ~ 20°C", gravitasi: "3.72 m/s²", satelit: "2" },
+        info: "Planet Merah memiliki Olympus Mons — gunung berapi tertinggi di Tata Surya (21.9 km), Valles Marineris — ngarai sepanjang 4.000 km, es air di kutub, dan badai debu yang bisa menyelimuti seluruh planet. Mars memiliki 2 bulan kecil: Phobos dan Deimos.",
+        alien: "Taufik! Aku Dustok, Penguasa Badai Merah! Lihatlah kerajaanku yang merah membara! Di sini berdiri Olympus Mons — gunung berapi TERTINGGI di seluruh Tata Surya, tingginya 21.9 kilometer! Dan Valles Marineris, ngarai sepanjang 4.000 km yang bisa menelan seluruh Amerika! Badai debuku bisa membesar hingga menyelimuti SELURUH planet selama berbulan-bulan — gelap total, debu di mana-mana! Es air tersimpan di kutub dan bawah permukaan — harta karun bagi penjelajah. Tapi hati-hati, radiasi kosmik di sini sangat tinggi karena aku tak punya medan magnet!",
+        alienName: "Dustok",
+        alienColor: 0x7a2a1a,
+        alienEyeColor: 0xff2200,
+        source: "https://science.nasa.gov/mars/facts/"
+      },
+      {
+        name: "Jupiter", size: 16, orbitRadius: 240, orbitSpeed: 0.13, color: 0xc4956a, type: "bands",
+        tilt: 0.054, rotSpeed: 0.02,
+        skyColor: 0xdda468, fogColor: 0xbe8346, fogDensity: 0.012, sunLightColor: 0xffdeb8,
+        windProfile: { freq: 110, q: 5.0, gain: 0.22, rumble: 0.25, name: "Gemuruh Badai Bintik Merah Raksasa" },
+        stats: { diameter: "139.820 km", suhu: "-145°C (awan)", gravitasi: "24.79 m/s²", satelit: "95+" },
+        info: "Planet terbesar! Raksasa gas tanpa permukaan padat. Bintik Merah Besar adalah badai anticyclone raksasa yang telah berputar selama ratusan tahun, lebarnya 1.3× diameter Bumi. Jupiter punya 95+ bulan, termasuk Europa yang diduga menyimpan samudra di bawah lapisan es. Medan magnetnya 20.000× lebih kuat dari Bumi.",
+        alien: "SIAPA YANG BERANI MENDEKATI JUPITER?! Aku Jovrath, Dewa Badai! Kau melihat Bintik Merah Besarku? Itu BADAI yang lebih besar dari Bumiku, berputar selama RATUSAN TAHUN tanpa henti! Anginnya mencapai 640 km/jam! Aku raksasa gas — tak ada permukaan padat untuk menginjakkan kaki. Massaku 318 kali Bumi, gravitasiku akan meremukkanmu! Medan magnetku 20.000 kali lebih kuat dari planetmu — radiasi di sekitarku bisa membunuh manusia dalam hitungan menit! Tapi di bulan Europa-ku... mungkin ada KEHIDUPAN di samudra bawah esnya. Menarik, bukan? HAHAHA!",
+        alienName: "Jovrath",
+        alienColor: 0x6a4a2a,
+        alienEyeColor: 0xff0000,
+        source: "https://science.nasa.gov/jupiter/facts/"
+      },
+      {
+        name: "Saturnus", size: 13, orbitRadius: 340, orbitSpeed: 0.097, color: 0xd4b87a, type: "bands",
+        tilt: 0.47, rotSpeed: 0.018,
+        hasRing: true,
+        skyColor: 0xdfcb8a, fogColor: 0xbfa964, fogDensity: 0.011, sunLightColor: 0xfff0cc,
+        windProfile: { freq: 220, q: 3.2, gain: 0.16, rumble: 0.14, name: "Deru Angin Atmosfer 1.800 km/j" },
+        stats: { diameter: "116.460 km", suhu: "-178°C (awan)", gravitasi: "10.44 m/s²", satelit: "146+" },
+        info: "Saturnus terkenal dengan cincin spektakulernya — terdiri dari milyaran bongkahan es dan batu, membentang 282.000 km tapi tebalnya hanya ~10 meter! Saturnus adalah raksasa gas dengan kepadatan terendah — bisa mengapung di air (jika ada bak mandi cukup besar). Bulan Titan punya atmosfer tebal dan danau hidrokarbon.",
+        alien: "Kagumi cincinku, manusia! Aku Ringara, Penjaga Cincin Abadi! Cincin-cincinku terdiri dari MILYARAN bongkahan es dan batu — membentang 282.000 kilometer, tapi tebalnya hanya 10 meter! Bukankah itu mengagumkan? Aku begitu ringan sehingga bisa MENGAPUNG di air! Di bulan Titan-ku terdapat danau dan sungai — bukan air, tapi METANA cair! Hujan metana turun dari langitnya. Dan angin di atmosferku bisa mencapai 1.800 km/jam! Di kutub utaraku ada pola heksagonal misterius — badai berbentuk segi enam yang TIDAK ADA di planet lain manapun! Pergi, sebelum anginku menyapumu!",
+        alienName: "Ringara",
+        alienColor: 0x8a7a4a,
+        alienEyeColor: 0xffdd00,
+        source: "https://science.nasa.gov/saturn/facts/"
+      },
+      {
+        name: "Uranus", size: 9, orbitRadius: 440, orbitSpeed: 0.068, color: 0x5ac8c8, type: "ice",
+        tilt: 1.71, rotSpeed: 0.012,
+        skyColor: 0x72e4e4, fogColor: 0x48b6b6, fogDensity: 0.01, sunLightColor: 0xe0ffff,
+        windProfile: { freq: 320, q: 2.8, gain: 0.14, rumble: 0.08, name: "Badai Dingin Metana Ekstrem -224°C" },
+        stats: { diameter: "50.724 km", suhu: "-224°C", gravitasi: "8.87 m/s²", satelit: "28" },
+        info: "Uranus adalah raksasa es yang berotasi miring hampir menyamping (kemiringan sumbu 98°). Atmosfer metana memberinya warna biru-hijau. Suhunya bisa mencapai -224°C — terdingin di Tata Surya. Memiliki sistem cincin tipis dan 28 bulan yang diketahui.",
+        alien: "Aku Tilthar, Penguasa Dunia Miring! Planetku berputar MENYAMPING — bayangkan itu! Kemiringan sumbu 98 derajat! Ini berarti satu kutubku menghadap Matahari selama 42 tahun, lalu kutub lainnya selama 42 tahun berikutnya! Suhuku bisa turun ke -224°C — TERDINGIN di seluruh Tata Surya! Atmosfer metanaku memberi warna biru-hijau yang indah... tapi mematikan. Di dalam perutku, tekanan sangat tinggi menciptakan hujan berlian! Ya, BERLIAN! Tapi jangan bermimpi menambangnya — kau takkan bertahan sedetik pun di kedalaman itu!",
+        alienName: "Tilthar",
+        alienColor: 0x2a6a6a,
+        alienEyeColor: 0x00ffff,
+        source: "https://science.nasa.gov/uranus/facts/"
+      },
+      {
+        name: "Neptunus", size: 8.5, orbitRadius: 540, orbitSpeed: 0.054, color: 0x2244cc, type: "ice",
+        tilt: 0.49, rotSpeed: 0.011,
+        skyColor: 0x3b66e6, fogColor: 0x1f3ea8, fogDensity: 0.01, sunLightColor: 0xc8ddff,
+        windProfile: { freq: 490, q: 4.2, gain: 0.22, rumble: 0.18, name: "Pusaran Angin Supersonik 2.100 km/j" },
+        stats: { diameter: "49.244 km", suhu: "-218°C", gravitasi: "11.15 m/s²", satelit: "16" },
+        info: "Planet terjauh! Neptunus punya angin tercepat di Tata Surya — hingga 2.100 km/jam. Badai Bintik Gelap muncul dan menghilang di atmosfernya. Bulan terbesarnya Triton memiliki geyser nitrogen dan mengorbit terbalik (retrograde), menandakan ia adalah objek yang tertangkap gravitasi Neptunus.",
+        alien: "KAU SUDAH SAMPAI DI UJUNG KEGELAPAN, TAUFIK! Aku Nepthral, Penguasa Kegelapan Abadi! Di sini, cahaya Matahari nyaris tak sampai — siangku hanya seterang senja di Bumi! Tapi jangan anggap aku tenang — anginku TERCEPAT di Tata Surya, melebihi 2.100 km/jam! Badai Bintik Gelap muncul dan menghilang secara misterius. Di bulan Triton-ku, geyser nitrogen menyembur 8 km ke langit! Triton mengorbit TERBALIK — tanda ia ditangkap dari Sabuk Kuiper. Suhunya -235°C di sana! Ini adalah perbatasan terakhir... di balikku hanya kegelapan tanpa akhir. Beranikah kau melangkah lebih jauh?!",
+        alienName: "Nepthral",
+        alienColor: 0x1a2a6a,
+        alienEyeColor: 0x4488ff,
+        source: "https://science.nasa.gov/neptune/facts/"
+      }
+    ];
+
+    /* ═══════════════════════════════════════════
+       TEXTURE GENERATION
+    ═══════════════════════════════════════════ */
+    function makeTexture(baseColor, type, size = 1024) {
+      const c = document.createElement("canvas");
+      c.width = size; c.height = size / 2;
+      const ctx = c.getContext("2d");
+      const base = "#" + new THREE.Color(baseColor).getHexString();
+
+      // Base fill
+      ctx.fillStyle = base;
+      ctx.fillRect(0, 0, c.width, c.height);
+
+      // Noise layer
+      for (let i = 0; i < 4000; i++) {
+        const x = Math.random() * c.width;
+        const y = Math.random() * c.height;
+        const r = Math.random() * (type === "bands" ? 12 : 6) + 0.5;
+        const a = Math.random() * 0.18;
+        ctx.fillStyle = Math.random() > .5
+          ? `rgba(255,255,255,${a})`
+          : `rgba(0,0,0,${a})`;
+        ctx.beginPath();
+        ctx.ellipse(x, y, r * 2, r, Math.random() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if (type === "rock") {
+        // Craters
+        for (let i = 0; i < 200; i++) {
+          const cx = Math.random() * c.width;
+          const cy = Math.random() * c.height;
+          const cr = 2 + Math.random() * 15;
+          ctx.beginPath();
+          ctx.arc(cx, cy, cr, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(0,0,0,${0.08 + Math.random() * 0.12})`;
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(cx - cr * 0.2, cy - cr * 0.2, cr * 0.7, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255,255,255,${0.03 + Math.random() * 0.05})`;
+          ctx.fill();
+        }
+      }
+
+      if (type === "venus") {
+        // Thick swirling clouds
+        for (let y = 0; y < c.height; y += 3) {
+          const wave = Math.sin(y * 0.02) * 40;
+          ctx.fillStyle = `rgba(220,180,100,${0.03 + Math.random() * 0.06})`;
+          ctx.fillRect(wave, y, c.width, 2 + Math.random() * 4);
+        }
+        for (let i = 0; i < 80; i++) {
+          ctx.beginPath();
+          const sx = Math.random() * c.width;
+          const sy = Math.random() * c.height;
+          ctx.ellipse(sx, sy, 30 + Math.random() * 80, 5 + Math.random() * 15,
+            Math.random() * 0.3, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(240,200,120,${0.04 + Math.random() * 0.06})`;
+          ctx.fill();
+        }
+      }
+
+      if (type === "earth") {
+        // Land masses
+        const landColor = "rgba(45,130,60,.85)";
+        for (let i = 0; i < 120; i++) {
+          ctx.beginPath();
+          ctx.ellipse(
+            Math.random() * c.width, Math.random() * c.height,
+            10 + Math.random() * 50, 5 + Math.random() * 25,
+            Math.random() * Math.PI, 0, Math.PI * 2
+          );
+          ctx.fillStyle = landColor;
+          ctx.fill();
+        }
+        // Ice caps
+        ctx.fillStyle = "rgba(230,245,255,.8)";
+        ctx.fillRect(0, 0, c.width, 20 + Math.random() * 15);
+        ctx.fillRect(0, c.height - 25, c.width, 25);
+        // Clouds
+        for (let i = 0; i < 150; i++) {
+          ctx.beginPath();
+          ctx.ellipse(
+            Math.random() * c.width, Math.random() * c.height,
+            10 + Math.random() * 40, 2 + Math.random() * 5,
+            Math.random(), 0, Math.PI * 2
+          );
+          ctx.fillStyle = `rgba(255,255,255,${0.15 + Math.random() * 0.2})`;
+          ctx.fill();
+        }
+      }
+
+      if (type === "mars") {
+        // Craters and valleys
+        for (let i = 0; i < 150; i++) {
+          ctx.beginPath();
+          ctx.arc(Math.random() * c.width, Math.random() * c.height,
+            2 + Math.random() * 12, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(60,20,10,${0.1 + Math.random() * 0.15})`;
+          ctx.fill();
+        }
+        // Polar ice
+        ctx.fillStyle = "rgba(220,230,240,.5)";
+        ctx.fillRect(0, 0, c.width, 12);
+        ctx.fillRect(0, c.height - 12, c.width, 12);
+        // Olympus Mons hint
+        ctx.beginPath();
+        ctx.arc(c.width * 0.3, c.height * 0.35, 30, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(180,100,60,.2)";
+        ctx.fill();
+      }
+
+      if (type === "bands") {
+        // Gas giant bands
+        for (let y = 0; y < c.height; y += 4 + Math.random() * 12) {
+          const colors = ["255,230,190", "180,140,90", "200,160,100", "140,100,70", "220,180,130"];
+          const col = colors[Math.floor(Math.random() * colors.length)];
+          ctx.fillStyle = `rgba(${col},${0.08 + Math.random() * 0.15})`;
+          const h = 3 + Math.random() * 15;
+          ctx.fillRect(0, y, c.width, h);
+        }
+        // Great Red Spot for Jupiter
+        if (baseColor === 0xc4956a) {
+          ctx.beginPath();
+          ctx.ellipse(c.width * 0.6, c.height * 0.55, 45, 25, 0.1, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(200,80,40,.35)";
+          ctx.fill();
+          ctx.beginPath();
+          ctx.ellipse(c.width * 0.6, c.height * 0.55, 30, 15, 0.1, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(220,60,30,.25)";
+          ctx.fill();
+        }
+      }
+
+      if (type === "ice") {
+        // Ice giant atmosphere
+        for (let y = 0; y < c.height; y += 8 + Math.random() * 20) {
+          ctx.fillStyle = `rgba(200,240,255,${0.03 + Math.random() * 0.06})`;
+          ctx.fillRect(0, y, c.width, 2 + Math.random() * 6);
+        }
+        for (let i = 0; i < 40; i++) {
+          ctx.beginPath();
+          ctx.ellipse(
+            Math.random() * c.width, Math.random() * c.height,
+            20 + Math.random() * 60, 5 + Math.random() * 10,
+            Math.random() * 0.5, 0, Math.PI * 2
+          );
+          ctx.fillStyle = `rgba(180,220,255,${0.03 + Math.random() * 0.05})`;
+          ctx.fill();
+        }
+      }
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+
+    function makeBumpMap(baseColor, type) {
+      const c = document.createElement("canvas");
+      c.width = 512; c.height = 256;
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#808080";
+      ctx.fillRect(0, 0, c.width, c.height);
+
+      for (let i = 0; i < 2000; i++) {
+        const x = Math.random() * c.width;
+        const y = Math.random() * c.height;
+        const r = Math.random() * 8 + 1;
+        const v = Math.floor(100 + Math.random() * 80);
+        ctx.fillStyle = `rgb(${v},${v},${v})`;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if (type === "rock" || type === "mars") {
+        for (let i = 0; i < 100; i++) {
+          const cx = Math.random() * c.width;
+          const cy = Math.random() * c.height;
+          const cr = 3 + Math.random() * 15;
+          ctx.beginPath();
+          ctx.arc(cx, cy, cr, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(40,40,40,${0.3 + Math.random() * 0.3})`;
+          ctx.fill();
+        }
+      }
+
+      return new THREE.CanvasTexture(c);
+    }
+
+    /* ═══════════════════════════════════════════
+       STARS (multi-layer)
+    ═══════════════════════════════════════════ */
+    function createStarfield() {
+      // Far stars
+      const count1 = 12000;
+      const pos1 = new Float32Array(count1 * 3);
+      const sizes1 = new Float32Array(count1);
+      const colors1 = new Float32Array(count1 * 3);
+      const starColors = [
+        new THREE.Color(0xffffff),
+        new THREE.Color(0xaaccff),
+        new THREE.Color(0xffddaa),
+        new THREE.Color(0xffaaaa),
+        new THREE.Color(0xaaffff),
+      ];
+      for (let i = 0; i < count1; i++) {
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        const r = 1500 + Math.random() * 2500;
+        pos1[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+        pos1[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+        pos1[i * 3 + 2] = r * Math.cos(phi);
+        sizes1[i] = 0.3 + Math.random() * 1.5;
+        const sc = starColors[Math.floor(Math.random() * starColors.length)];
+        colors1[i * 3] = sc.r;
+        colors1[i * 3 + 1] = sc.g;
+        colors1[i * 3 + 2] = sc.b;
+      }
+      const geo1 = new THREE.BufferGeometry();
+      geo1.setAttribute("position", new THREE.BufferAttribute(pos1, 3));
+      geo1.setAttribute("size", new THREE.BufferAttribute(sizes1, 1));
+      geo1.setAttribute("color", new THREE.BufferAttribute(colors1, 3));
+      const stars1 = new THREE.Points(geo1, new THREE.PointsMaterial({
+        size: 0.8, vertexColors: true, sizeAttenuation: true, transparent: true, opacity: 0.9
+      }));
+      scene.add(stars1);
+
+      // Near twinkle stars
+      const count2 = 3000;
+      const pos2 = new Float32Array(count2 * 3);
+      for (let i = 0; i < count2; i++) {
+        pos2[i * 3] = (Math.random() - 0.5) * 3000;
+        pos2[i * 3 + 1] = (Math.random() - 0.5) * 1500;
+        pos2[i * 3 + 2] = (Math.random() - 0.5) * 3000;
+      }
+      const geo2 = new THREE.BufferGeometry();
+      geo2.setAttribute("position", new THREE.BufferAttribute(pos2, 3));
+      const stars2 = new THREE.Points(geo2, new THREE.PointsMaterial({
+        color: 0xeef4ff, size: 0.4, transparent: true, opacity: 0.6
+      }));
+      scene.add(stars2);
+      return { stars1, stars2 };
+    }
+
+    const { stars1, stars2 } = createStarfield();
+
+    /* ═══════════════════════════════════════════
+       SUN
+    ═══════════════════════════════════════════ */
+    function createSun() {
+      const group = new THREE.Group();
+
+      // Core
+      const sunGeo = new THREE.SphereGeometry(20, 64, 64);
+      const sunMat = new THREE.MeshBasicMaterial({
+        color: 0xffdd44,
+        emissive: 0xffaa00
+      });
+      const sunMesh = new THREE.Mesh(sunGeo, sunMat);
+      group.add(sunMesh);
+
+      // Inner glow
+      const glow1 = new THREE.Mesh(
+        new THREE.SphereGeometry(23, 32, 32),
+        new THREE.MeshBasicMaterial({
+          color: 0xffaa33, transparent: true, opacity: 0.3, side: THREE.BackSide
+        })
+      );
+      group.add(glow1);
+
+      // Outer glow
+      const glow2 = new THREE.Mesh(
+        new THREE.SphereGeometry(30, 32, 32),
+        new THREE.MeshBasicMaterial({
+          color: 0xff8800, transparent: true, opacity: 0.08, side: THREE.BackSide
+        })
+      );
+      group.add(glow2);
+
+      // Corona
+      const glow3 = new THREE.Mesh(
+        new THREE.SphereGeometry(40, 32, 32),
+        new THREE.MeshBasicMaterial({
+          color: 0xff6600, transparent: true, opacity: 0.03, side: THREE.BackSide
+        })
+      );
+      group.add(glow3);
+
+      scene.add(group);
+      return { group, mesh: sunMesh, glows: [glow1, glow2, glow3] };
+    }
+
+    const sun = createSun();
+
+    /* ═══════════════════════════════════════════
+       ORBITS
+    ═══════════════════════════════════════════ */
+    function makeOrbit(radius) {
+      const curve = new THREE.EllipseCurve(0, 0, radius, radius, 0, Math.PI * 2, false, 0);
+      const pts = curve.getPoints(200).map(p => new THREE.Vector3(p.x, 0, p.y));
+      const geo = new THREE.BufferGeometry().setFromPoints(pts);
+      const orbit = new THREE.LineLoop(geo, new THREE.LineBasicMaterial({
+        color: 0x1a2a4a, transparent: true, opacity: 0.35
+      }));
+      scene.add(orbit);
+    }
+
+    /* ═══════════════════════════════════════════
+       CREATE PLANETS
+    ═══════════════════════════════════════════ */
+    const planetMeshes = [];
+    const planetGroups = [];
+
+    planets.forEach((p, i) => {
+      makeOrbit(p.orbitRadius);
+
+      const geo = new THREE.SphereGeometry(p.size, 64, 64);
+      const mat = new THREE.MeshStandardMaterial({
+        map: makeTexture(p.color, p.type),
+        bumpMap: makeBumpMap(p.color, p.type),
+        bumpScale: p.type === "rock" || p.type === "mars" ? 0.3 : 0.05,
+        roughness: p.type === "bands" || p.type === "ice" ? 0.6 : 0.85,
+        metalness: 0.02,
+      });
+
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+
+      // Planet orbit group (rotates around sun)
+      const orbitGroup = new THREE.Group();
+      mesh.position.set(p.orbitRadius, 0, 0);
+      orbitGroup.add(mesh);
+
+      // Initial random orbit position
+      const startAngle = Math.random() * Math.PI * 2;
+      orbitGroup.rotation.y = startAngle;
+      p._orbitAngle = startAngle;
+
+      scene.add(orbitGroup);
+      p.mesh = mesh;
+      p.orbitGroup = orbitGroup;
+      planetMeshes.push(mesh);
+      planetGroups.push(orbitGroup);
+
+      // Atmosphere for Earth
+      if (p.name === "Bumi") {
+        const atmo = new THREE.Mesh(
+          new THREE.SphereGeometry(p.size * 1.03, 48, 48),
+          new THREE.MeshStandardMaterial({
+            color: 0x6699ff, transparent: true, opacity: 0.15,
+            side: THREE.FrontSide, roughness: 1
+          })
+        );
+        mesh.add(atmo);
+
+        // Moon
+        const moonGeo = new THREE.SphereGeometry(1.2, 32, 32);
+        const moonMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.9 });
+        const moon = new THREE.Mesh(moonGeo, moonMat);
+        moon.position.set(12, 1, 0);
+        mesh.add(moon);
+        p._moon = moon;
+      }
+
+      // Rings for Saturn
+      if (p.hasRing) {
+        const ringGeo = new THREE.RingGeometry(p.size * 1.3, p.size * 2.2, 128);
+        // Color the ring
+        const ringCanvas = document.createElement("canvas");
+        ringCanvas.width = 512; ringCanvas.height = 64;
+        const rctx = ringCanvas.getContext("2d");
+        const grad = rctx.createLinearGradient(0, 0, 512, 0);
+        grad.addColorStop(0, "rgba(200,180,140,0.1)");
+        grad.addColorStop(0.15, "rgba(210,190,150,0.8)");
+        grad.addColorStop(0.3, "rgba(180,160,120,0.3)");
+        grad.addColorStop(0.45, "rgba(200,180,140,0.9)");
+        grad.addColorStop(0.6, "rgba(170,150,110,0.4)");
+        grad.addColorStop(0.75, "rgba(190,170,130,0.7)");
+        grad.addColorStop(1, "rgba(160,140,100,0.05)");
+        rctx.fillStyle = grad;
+        rctx.fillRect(0, 0, 512, 64);
+        // Add bands
+        for (let y = 0; y < 64; y += 2) {
+          rctx.fillStyle = `rgba(${150 + Math.random() * 60},${130 + Math.random() * 50},${80 + Math.random() * 40},${Math.random() * 0.3})`;
+          rctx.fillRect(0, y, 512, 1);
+        }
+        const ringTex = new THREE.CanvasTexture(ringCanvas);
+
+        const ringMat = new THREE.MeshStandardMaterial({
+          map: ringTex, side: THREE.DoubleSide,
+          transparent: true, opacity: 0.8, roughness: 0.8
+        });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = Math.PI / 2.3;
+        mesh.add(ring);
+      }
+
+      // Atmosphere glow for gas giants
+      if (p.type === "bands" || p.type === "ice") {
+        const atmoGlow = new THREE.Mesh(
+          new THREE.SphereGeometry(p.size * 1.04, 32, 32),
+          new THREE.MeshBasicMaterial({
+            color: p.color, transparent: true, opacity: 0.06, side: THREE.BackSide
+          })
+        );
+        mesh.add(atmoGlow);
+      }
+
+      // Landing pad (kept small, terrain added dynamically)
+      const padGroup = new THREE.Group();
+      const pad = new THREE.Mesh(
+        new THREE.CircleGeometry(16, 64),
+        new THREE.MeshStandardMaterial({
+          color: 0x333340, roughness: 0.95, metalness: 0.1
+        })
+      );
+      pad.rotation.x = -Math.PI / 2;
+      padGroup.add(pad);
+
+      // Landing pad markings
+      const markRing = new THREE.Mesh(
+        new THREE.RingGeometry(6, 6.5, 48),
+        new THREE.MeshStandardMaterial({ color: 0x5bf1ff, emissive: 0x2a6a8a, emissiveIntensity: 0.5, side: THREE.DoubleSide })
+      );
+      markRing.rotation.x = -Math.PI / 2;
+      markRing.position.y = 0.02;
+      padGroup.add(markRing);
+
+      padGroup.position.set(p.orbitRadius, p.size + 0.04, 0);
+      orbitGroup.add(padGroup);
+      p._pad = padGroup;
+
+      // --- BIG TERRAIN GROUND (visible when landed) ---
+      // Create a large ground plane for each planet so it looks like you're ON the surface
+      const groundColors = {
+        'Merkurius': 0x7a6a5a, 'Venus': 0x8a7040, 'Bumi': 0x3a7a4a,
+        'Mars': 0x9a4a2a, 'Jupiter': 0x8a7050, 'Saturnus': 0x9a8a5a,
+        'Uranus': 0x4a8a8a, 'Neptunus': 0x2a3a7a
+      };
+      const gColor = groundColors[p.name] || 0x555555;
+
+      // Create terrain texture
+      const terrainCanvas = document.createElement('canvas');
+      terrainCanvas.width = 1024; terrainCanvas.height = 1024;
+      const tctx = terrainCanvas.getContext('2d');
+      tctx.fillStyle = '#' + new THREE.Color(gColor).getHexString();
+      tctx.fillRect(0, 0, 1024, 1024);
+      // Add noise/details
+      for (let ti = 0; ti < 5000; ti++) {
+        const tx = Math.random() * 1024;
+        const ty = Math.random() * 1024;
+        const tr = 1 + Math.random() * 8;
+        const ta = Math.random() * 0.15;
+        tctx.fillStyle = Math.random() > 0.5 ? `rgba(255,255,255,${ta})` : `rgba(0,0,0,${ta})`;
+        tctx.beginPath();
+        tctx.arc(tx, ty, tr, 0, Math.PI * 2);
+        tctx.fill();
+      }
+      // Craters for rocky planets
+      if (['Merkurius','Venus','Mars','Bumi'].includes(p.name)) {
+        for (let ci = 0; ci < 60; ci++) {
+          const cx2 = Math.random() * 1024;
+          const cy2 = Math.random() * 1024;
+          const cr2 = 5 + Math.random() * 25;
+          tctx.beginPath();
+          tctx.arc(cx2, cy2, cr2, 0, Math.PI * 2);
+          tctx.fillStyle = `rgba(0,0,0,${0.05 + Math.random() * 0.1})`;
+          tctx.fill();
+          tctx.beginPath();
+          tctx.arc(cx2 - 2, cy2 - 2, cr2 * 0.6, 0, Math.PI * 2);
+          tctx.fillStyle = `rgba(255,255,255,${0.02 + Math.random() * 0.04})`;
+          tctx.fill();
+        }
+      }
+      const terrainTex = new THREE.CanvasTexture(terrainCanvas);
+      terrainTex.wrapS = THREE.RepeatWrapping;
+      terrainTex.wrapT = THREE.RepeatWrapping;
+      terrainTex.repeat.set(4, 4);
+
+      const terrain = new THREE.Mesh(
+        new THREE.PlaneGeometry(200, 200, 32, 32),
+        new THREE.MeshStandardMaterial({
+          map: terrainTex, roughness: 0.95, metalness: 0.02,
+          color: gColor
+        })
+      );
+      terrain.rotation.x = -Math.PI / 2;
+      terrain.position.set(p.orbitRadius, p.size + 0.02, 0);
+      terrain.visible = false; // hidden by default, shown when landing
+      terrain.receiveShadow = true;
+      orbitGroup.add(terrain);
+      p._terrain = terrain;
+
+      // Terrain details: bigger rocks, boulders
+      const terrainDetails = new THREE.Group();
+      for (let bi = 0; bi < 40; bi++) {
+        const boulder = new THREE.Mesh(
+          new THREE.DodecahedronGeometry(0.4 + Math.random() * 1.2, 0),
+          new THREE.MeshStandardMaterial({
+            color: new THREE.Color(gColor).lerp(new THREE.Color(0x222222), 0.3 + Math.random() * 0.3),
+            roughness: 0.95
+          })
+        );
+        const ba = Math.random() * Math.PI * 2;
+        const br = 15 + Math.random() * 70;
+        boulder.position.set(
+          p.orbitRadius + Math.cos(ba) * br,
+          p.size + 0.1 + Math.random() * 0.4,
+          Math.sin(ba) * br
+        );
+        boulder.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        boulder.castShadow = true;
+        terrainDetails.add(boulder);
+      }
+      terrainDetails.visible = false;
+      orbitGroup.add(terrainDetails);
+      p._terrainDetails = terrainDetails;
+
+      // Rocks around landing
+      for (let j = 0; j < 20; j++) {
+        const rockMat = new THREE.MeshStandardMaterial({
+          color: new THREE.Color(p.color).lerp(new THREE.Color(0x333333), 0.5),
+          roughness: 1
+        });
+        const rock = new THREE.Mesh(
+          new THREE.DodecahedronGeometry(0.3 + Math.random() * 0.8, 0),
+          rockMat
+        );
+        const ang = Math.random() * Math.PI * 2;
+        const rad = 10 + Math.random() * 8;
+        rock.position.set(
+          p.orbitRadius + Math.cos(ang) * rad,
+          p.size + 0.15 + Math.random() * 0.3,
+          Math.sin(ang) * rad
+        );
+        rock.rotation.set(Math.random(), Math.random(), Math.random());
+        orbitGroup.add(rock);
+      }
+    });
+
+    /* ═══════════════════════════════════════════
+       SHUTTLE (detailed)
+    ═══════════════════════════════════════════ */
+    function makeShuttle() {
+      const g = new THREE.Group();
+
+      const bodyMat = new THREE.MeshStandardMaterial({
+        color: 0xd8e4ef, metalness: 0.55, roughness: 0.3
+      });
+      const darkMat = new THREE.MeshStandardMaterial({
+        color: 0x1a2535, metalness: 0.6, roughness: 0.2
+      });
+      const accentMat = new THREE.MeshStandardMaterial({
+        color: 0x2a5a8a, metalness: 0.5, roughness: 0.3
+      });
+      const glowMat = new THREE.MeshStandardMaterial({
+        color: 0x5bf1ff, emissive: 0x2af0ff, emissiveIntensity: 2
+      });
+
+      // Main fuselage
+      const fuselage = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.3, 1.6, 8, 20),
+        bodyMat
+      );
+      fuselage.rotation.x = Math.PI / 2;
+      g.add(fuselage);
+
+      // Nose cone
+      const nose = new THREE.Mesh(
+        new THREE.ConeGeometry(1.3, 3.5, 20),
+        bodyMat
+      );
+      nose.rotation.x = -Math.PI / 2;
+      nose.position.z = 5.7;
+      g.add(nose);
+
+      // Cockpit window
+      const cockpit = new THREE.Mesh(
+        new THREE.SphereGeometry(0.9, 20, 16),
+        new THREE.MeshStandardMaterial({
+          color: 0x112233, metalness: 0.8, roughness: 0.1,
+          emissive: 0x1a3a5a, emissiveIntensity: 0.3
+        })
+      );
+      cockpit.scale.set(1, 0.5, 0.6);
+      cockpit.position.set(0, 0.95, 2.8);
+      g.add(cockpit);
+
+      // Side windows
+      for (let i = 0; i < 4; i++) {
+        const win = new THREE.Mesh(
+          new THREE.BoxGeometry(0.02, 0.3, 0.5),
+          new THREE.MeshStandardMaterial({
+            color: 0x3388cc, emissive: 0x1155aa, emissiveIntensity: 0.5,
+            metalness: 0.8, roughness: 0.1
+          })
+        );
+        win.position.set(1.3, 0.3, 1 - i * 1.2);
+        g.add(win);
+        const win2 = win.clone();
+        win2.position.x = -1.3;
+        g.add(win2);
+      }
+
+      // Main wings (delta shape)
+      const wingShape = new THREE.Shape();
+      wingShape.moveTo(0, 0);
+      wingShape.lineTo(5.5, -1);
+      wingShape.lineTo(5, -2.5);
+      wingShape.lineTo(0, -3.5);
+      const wingGeo = new THREE.ExtrudeGeometry(wingShape, { depth: 0.12, bevelEnabled: false });
+      const leftWing = new THREE.Mesh(wingGeo, bodyMat);
+      leftWing.position.set(0, -0.3, 1.5);
+      leftWing.rotation.x = Math.PI / 2;
+      g.add(leftWing);
+
+      const rightWing = new THREE.Mesh(wingGeo, bodyMat);
+      rightWing.position.set(0, -0.3, 1.5);
+      rightWing.rotation.x = Math.PI / 2;
+      rightWing.scale.x = -1;
+      g.add(rightWing);
+
+      // Vertical tail
+      const tailShape = new THREE.Shape();
+      tailShape.moveTo(0, 0);
+      tailShape.lineTo(0.08, 2.2);
+      tailShape.lineTo(-0.08, 2.2);
+      tailShape.lineTo(-0.15, 0);
+      const tailGeo = new THREE.ExtrudeGeometry(tailShape, { depth: 1.6, bevelEnabled: false });
+      const tail = new THREE.Mesh(tailGeo, accentMat);
+      tail.position.set(0, 0.5, -3.5);
+      g.add(tail);
+
+      // Horizontal stabilizers
+      for (const side of [-1, 1]) {
+        const stab = new THREE.Mesh(
+          new THREE.BoxGeometry(2.2 * side, 0.08, 1.2),
+          bodyMat
+        );
+        stab.position.set(side * 1.1, 0.2, -3.2);
+        g.add(stab);
+      }
+
+      // Engines
+      for (let i = 0; i < 3; i++) {
+        const angle = (i - 1) * 0.7;
+        const ex = Math.sin(angle) * 0.8;
+        const ey = -0.3 + Math.cos(angle) * 0.3;
+
+        // Engine bell
+        const engine = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.28, 0.42, 1.4, 14),
+          darkMat
+        );
+        engine.rotation.x = Math.PI / 2;
+        engine.position.set(ex, ey, -4.5);
+        g.add(engine);
+
+        // Engine inner glow
+        const engineGlow = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.2, 0.35, 0.3, 14),
+          new THREE.MeshBasicMaterial({ color: 0xff6633 })
+        );
+        engineGlow.rotation.x = Math.PI / 2;
+        engineGlow.position.set(ex, ey, -5.2);
+        g.add(engineGlow);
+      }
+
+      // Stripe decoration
+      const stripe = new THREE.Mesh(
+        new THREE.BoxGeometry(3.2, 0.02, 0.15),
+        accentMat
+      );
+      stripe.position.set(0, 1.1, 0);
+      g.add(stripe);
+
+      // LED strip lights
+      for (let i = -3; i <= 3; i++) {
+        const led = new THREE.Mesh(
+          new THREE.SphereGeometry(0.06, 8, 8),
+          glowMat
+        );
+        led.position.set(0, -1.55, i * 0.8);
+        g.add(led);
+      }
+
+      // Landing gear (when landed)
+      const gearMat = darkMat;
+      for (const pos of [[0, -1.8, 2], [-1.5, -1.8, -1.5], [1.5, -1.8, -1.5]]) {
+        const strut = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.06, 0.06, 0.6, 8),
+          gearMat
+        );
+        strut.position.set(...pos);
+        g.add(strut);
+        const foot = new THREE.Mesh(
+          new THREE.BoxGeometry(0.4, 0.06, 0.4),
+          gearMat
+        );
+        foot.position.set(pos[0], pos[1] - 0.3, pos[2]);
+        g.add(foot);
+      }
+
+      return g;
+    }
+
+    const shuttle = makeShuttle();
+    shuttle.position.set(80, 20, 60);
+    scene.add(shuttle);
+
+    /* ═══════════════════════════════════════════
+       ENGINE FLAME PARTICLES
+    ═══════════════════════════════════════════ */
+    const flameParticles = [];
+    const flameMat = new THREE.MeshBasicMaterial({
+      color: 0xff6622, transparent: true, opacity: 0.7
+    });
+
+    function createFlameParticle() {
+      const p = new THREE.Mesh(
+        new THREE.SphereGeometry(0.15 + Math.random() * 0.2, 6, 6),
+        flameMat.clone()
+      );
+      p.visible = false;
+      scene.add(p);
+      return { mesh: p, life: 0, maxLife: 0.4 + Math.random() * 0.3, vel: new THREE.Vector3() };
+    }
+
+    for (let i = 0; i < 40; i++) {
+      flameParticles.push(createFlameParticle());
+    }
+
+    let flamesActive = false;
+
+    function updateFlames(dt) {
+      if (!flamesActive) {
+        flameParticles.forEach(fp => fp.mesh.visible = false);
+        return;
+      }
+
+      for (const fp of flameParticles) {
+        fp.life += dt;
+        if (fp.life >= fp.maxLife) {
+          // Reset
+          fp.life = 0;
+          fp.maxLife = 0.3 + Math.random() * 0.4;
+          const worldPos = new THREE.Vector3();
+          shuttle.getWorldPosition(worldPos);
+          const backward = new THREE.Vector3(0, 0, -1).applyQuaternion(shuttle.quaternion);
+          fp.mesh.position.copy(worldPos).add(backward.multiplyScalar(5.5));
+          fp.mesh.position.x += (Math.random() - 0.5) * 0.8;
+          fp.mesh.position.y += (Math.random() - 0.5) * 0.8;
+          fp.vel.copy(backward.normalize().multiplyScalar(-(8 + Math.random() * 5)));
+          fp.vel.x += (Math.random() - 0.5) * 2;
+          fp.vel.y += (Math.random() - 0.5) * 2;
+          fp.mesh.visible = true;
+        }
+        fp.mesh.position.add(fp.vel.clone().multiplyScalar(dt));
+        const t = fp.life / fp.maxLife;
+        fp.mesh.material.opacity = (1 - t) * 0.8;
+        fp.mesh.scale.setScalar(1 + t * 2);
+        const c = fp.mesh.material.color;
+        c.setRGB(1, 0.3 + (1 - t) * 0.4, t * 0.3);
+      }
+    }
+
+    /* ═══════════════════════════════════════════
+       ASTRONAUT (Taufik) - detailed
+    ═══════════════════════════════════════════ */
+    function makeAstronaut() {
+      const group = new THREE.Group();
+
+      // Materials
+      const suitMat = new THREE.MeshStandardMaterial({
+        color: 0xf2f5f8, roughness: 0.65, metalness: 0.08
+      });
+      const suitDarkMat = new THREE.MeshStandardMaterial({
+        color: 0x222a36, roughness: 0.45, metalness: 0.25
+      });
+      const jointBellowMat = new THREE.MeshStandardMaterial({
+        color: 0x3d4552, roughness: 0.7, metalness: 0.15
+      });
+      const visorGoldMat = new THREE.MeshStandardMaterial({
+        color: 0xebb438, metalness: 0.95, roughness: 0.08,
+        emissive: 0x553508, emissiveIntensity: 0.25
+      });
+      const metalRingMat = new THREE.MeshStandardMaterial({
+        color: 0x98a2ad, metalness: 0.85, roughness: 0.2
+      });
+      const redStripeMat = new THREE.MeshStandardMaterial({
+        color: 0xd92525, roughness: 0.45 // NASA Commander Red Stripe
+      });
+      const flagRedMat = new THREE.MeshStandardMaterial({
+        color: 0xcc0000, roughness: 0.5
+      });
+      const flagWhiteMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff, roughness: 0.5
+      });
+      const dcmScreenMat = new THREE.MeshBasicMaterial({
+        color: 0x00f0ff
+      });
+      const headlampMat = new THREE.MeshBasicMaterial({
+        color: 0xffffff
+      });
+
+      // 1. TORSO (Hard Upper Torso - HUT)
+      const torso = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.68, 0.82, 8, 16),
+        suitMat
+      );
+      torso.position.y = 1.38;
+      group.add(torso);
+
+      // Torso shoulder arch pads (scuff pads)
+      const scuffPad = new THREE.Mesh(
+        new THREE.BoxGeometry(1.48, 0.28, 0.76),
+        suitMat
+      );
+      scuffPad.position.set(0, 1.82, -0.04);
+      group.add(scuffPad);
+
+      // Waist bearing ring
+      const waistRing = new THREE.Mesh(
+        new THREE.TorusGeometry(0.66, 0.05, 8, 24),
+        metalRingMat
+      );
+      waistRing.position.y = 0.96;
+      waistRing.rotation.x = Math.PI / 2;
+      group.add(waistRing);
+
+      // 2. DISPLAY & CONTROL MODULE (DCM) on Chest
+      const dcmBox = new THREE.Mesh(
+        new THREE.BoxGeometry(0.72, 0.52, 0.2),
+        suitDarkMat
+      );
+      dcmBox.position.set(0, 1.48, 0.56);
+      group.add(dcmBox);
+
+      // DCM Digital Status Display
+      const dcmDisplay = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.38, 0.14),
+        dcmScreenMat
+      );
+      dcmDisplay.position.set(0, 1.58, 0.67);
+      group.add(dcmDisplay);
+
+      // DCM control switches / valves
+      for (let i = 0; i < 4; i++) {
+        const sw = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.025, 0.025, 0.06, 8),
+          new THREE.MeshStandardMaterial({
+            color: [0xdd3333, 0x33aaee, 0xeeeeee, 0xeeaa22][i],
+            metalness: 0.5
+          })
+        );
+        sw.rotation.x = Math.PI / 2;
+        sw.position.set(-0.2 + i * 0.13, 1.4, 0.67);
+        group.add(sw);
+      }
+
+      // Emergency Oxygen Purge Actuator (Red lever)
+      const purgeLever = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06, 0.16, 0.05),
+        redStripeMat
+      );
+      purgeLever.position.set(0.28, 1.5, 0.66);
+      group.add(purgeLever);
+
+      // 3. BADGES & INDONESIAN FLAG 🇮🇩
+      // Indonesian Flag on left shoulder
+      const flagRed = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, 0.06, 0.02),
+        flagRedMat
+      );
+      flagRed.position.set(-0.84, 1.84, 0.08);
+      flagRed.rotation.y = -Math.PI / 2;
+      group.add(flagRed);
+
+      const flagWhite = new THREE.Mesh(
+        new THREE.BoxGeometry(0.18, 0.06, 0.02),
+        flagWhiteMat
+      );
+      flagWhite.position.set(-0.84, 1.78, 0.08);
+      flagWhite.rotation.y = -Math.PI / 2;
+      group.add(flagWhite);
+
+      // Name Patch "TAUFIK"
+      const namePlate = new THREE.Mesh(
+        new THREE.BoxGeometry(0.34, 0.11, 0.02),
+        new THREE.MeshStandardMaterial({ color: 0x11284a, roughness: 0.4 })
+      );
+      namePlate.position.set(0.28, 1.72, 0.58);
+      group.add(namePlate);
+
+      // Red Commander stripes on right shoulder
+      const cmdStripe = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.23, 0.23, 0.08, 14, 1, true),
+        redStripeMat
+      );
+      cmdStripe.position.set(0.86, 1.78, 0);
+      group.add(cmdStripe);
+
+      // 4. HELMET & EXTRAVEHICULAR VISOR ASSEMBLY (EVVA)
+      // Neck disconnect clamp ring
+      const neckRing = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.48, 0.52, 0.1, 24),
+        metalRingMat
+      );
+      neckRing.position.y = 2.02;
+      group.add(neckRing);
+
+      // Helmet sphere
+      const helmetShell = new THREE.Mesh(
+        new THREE.SphereGeometry(0.62, 28, 24),
+        suitMat
+      );
+      helmetShell.position.set(0, 2.44, 0);
+      group.add(helmetShell);
+
+      // Golden reflective sun visor
+      const goldVisor = new THREE.Mesh(
+        new THREE.SphereGeometry(0.53, 28, 22, -Math.PI * 0.5, Math.PI, 0, Math.PI * 0.62),
+        visorGoldMat
+      );
+      goldVisor.rotation.x = -0.15;
+      goldVisor.rotation.y = -Math.PI / 2;
+      goldVisor.position.set(0, 2.38, 0.12);
+      group.add(goldVisor);
+
+      // Visor thermal sunshade flap (top shield)
+      const sunShield = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.55, 0.58, 0.16, 20, 1, false, 0, Math.PI),
+        suitMat
+      );
+      sunShield.position.set(0, 2.76, 0.06);
+      sunShield.rotation.x = 0.2;
+      group.add(sunShield);
+
+      // Helmet Mounted Work Lights (Left & Right Headlamps)
+      for (const side of [-1, 1]) {
+        const lightPod = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.06, 0.06, 0.18, 10),
+          suitDarkMat
+        );
+        lightPod.position.set(side * 0.58, 2.62, 0.14);
+        lightPod.rotation.x = Math.PI / 2;
+        group.add(lightPod);
+
+        const lightLens = new THREE.Mesh(
+          new THREE.CircleGeometry(0.055, 12),
+          headlampMat
+        );
+        lightLens.position.set(side * 0.58, 2.62, 0.24);
+        group.add(lightLens);
+      }
+
+      // EVA Helmet Headlight PointLight
+      const headLight = new THREE.PointLight(0xfff5e0, 1.8, 18, 1.2);
+      headLight.position.set(0, 2.6, 1.2);
+      group.add(headLight);
+
+      // 5. PORTABLE LIFE SUPPORT SYSTEM (PLSS BACKPACK)
+      const plss = new THREE.Mesh(
+        new THREE.BoxGeometry(0.96, 1.28, 0.52),
+        suitMat
+      );
+      plss.position.set(0, 1.48, -0.62);
+      group.add(plss);
+
+      // PLSS upper vent cover
+      const plssVent = new THREE.Mesh(
+        new THREE.BoxGeometry(0.8, 0.22, 0.44),
+        suitDarkMat
+      );
+      plssVent.position.set(0, 2.16, -0.62);
+      group.add(plssVent);
+
+      // Oxygen primary tanks (left and right)
+      for (const side of [-1, 1]) {
+        const tank = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.12, 0.12, 0.95, 12),
+          new THREE.MeshStandardMaterial({ color: 0xd0d8e2, metalness: 0.7, roughness: 0.3 })
+        );
+        tank.position.set(side * 0.36, 1.48, -0.88);
+        group.add(tank);
+
+        // Tank pressure gauge caps
+        const cap = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.08, 0.08, 0.08, 10),
+          metalRingMat
+        );
+        cap.position.set(side * 0.36, 2.0, -0.88);
+        group.add(cap);
+      }
+
+      // SAFER Propulsion Nozzle Units on lower PLSS
+      for (const side of [-1, 1]) {
+        for (const tz of [-0.48, -0.74]) {
+          const nozzle = new THREE.Mesh(
+            new THREE.ConeGeometry(0.04, 0.1, 8),
+            metalRingMat
+          );
+          nozzle.rotation.x = Math.PI;
+          nozzle.position.set(side * 0.48, 0.92, tz);
+          group.add(nozzle);
+        }
+      }
+
+      // UHF Telemetry Antenna
+      const antennaPole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.018, 0.018, 0.6, 6),
+        suitDarkMat
+      );
+      antennaPole.position.set(-0.4, 2.5, -0.62);
+      antennaPole.rotation.z = -0.15;
+      group.add(antennaPole);
+
+      const antennaBeacon = new THREE.Mesh(
+        new THREE.SphereGeometry(0.045, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0x00ff88 })
+      );
+      antennaBeacon.position.set(-0.45, 2.8, -0.62);
+      group.add(antennaBeacon);
+
+      // Umbilical cooling tubes from chest to PLSS
+      for (const side of [-1, 1]) {
+        const curve = new THREE.QuadraticBezierCurve3(
+          new THREE.Vector3(side * 0.38, 1.25, 0.48),
+          new THREE.Vector3(side * 0.65, 1.15, -0.1),
+          new THREE.Vector3(side * 0.46, 1.25, -0.58)
+        );
+        const tubeGeom = new THREE.TubeGeometry(curve, 12, 0.038, 8, false);
+        const tubeMesh = new THREE.Mesh(
+          tubeGeom,
+          new THREE.MeshStandardMaterial({ color: 0x184488, roughness: 0.5 })
+        );
+        group.add(tubeMesh);
+      }
+
+      // 6. ARMS & REALISTIC SPACE GLOVES
+      for (const side of [-1, 1]) {
+        // Shoulder disconnect ring
+        const sRing = new THREE.Mesh(
+          new THREE.TorusGeometry(0.24, 0.04, 8, 16),
+          metalRingMat
+        );
+        sRing.position.set(side * 0.8, 1.82, 0);
+        sRing.rotation.y = Math.PI / 2;
+        group.add(sRing);
+
+        // Upper arm with pleated bellow elbow
+        const upperArm = new THREE.Mesh(
+          new THREE.CapsuleGeometry(0.2, 0.42, 6, 10),
+          suitMat
+        );
+        upperArm.position.set(side * 0.88, 1.52, 0);
+        upperArm.rotation.z = side * -0.12;
+        group.add(upperArm);
+
+        // Elbow joint bellow
+        const elbowBellow = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.19, 0.19, 0.14, 12),
+          jointBellowMat
+        );
+        elbowBellow.position.set(side * 0.94, 1.26, 0.04);
+        group.add(elbowBellow);
+
+        // Forearm
+        const forearm = new THREE.Mesh(
+          new THREE.CapsuleGeometry(0.18, 0.4, 6, 10),
+          suitMat
+        );
+        forearm.position.set(side * 0.98, 0.98, 0.12);
+        group.add(forearm);
+
+        // Wrist disconnect ring
+        const wristRing = new THREE.Mesh(
+          new THREE.TorusGeometry(0.16, 0.035, 6, 14),
+          metalRingMat
+        );
+        wristRing.position.set(side * 1.0, 0.74, 0.18);
+        wristRing.rotation.x = Math.PI / 2;
+        group.add(wristRing);
+
+        // Glove hand (anatomical with fingers)
+        const glovePalm = new THREE.Mesh(
+          new THREE.BoxGeometry(0.22, 0.18, 0.28),
+          suitDarkMat
+        );
+        glovePalm.position.set(side * 1.0, 0.62, 0.22);
+        group.add(glovePalm);
+
+        // Grip rubber fingertips
+        for (let f = 0; f < 3; f++) {
+          const finger = new THREE.Mesh(
+            new THREE.CapsuleGeometry(0.035, 0.1, 4, 6),
+            jointBellowMat
+          );
+          finger.position.set(side * (0.95 + f * 0.05), 0.48, 0.24 + f * 0.06);
+          group.add(finger);
+        }
+      }
+
+      // 7. LEGS & PLANETARY EVA BOOTS
+      for (const side of [-1, 1]) {
+        // Thigh
+        const thigh = new THREE.Mesh(
+          new THREE.CapsuleGeometry(0.25, 0.52, 6, 10),
+          suitMat
+        );
+        thigh.position.set(side * 0.32, 0.68, 0);
+        group.add(thigh);
+
+        // Thigh utility pocket
+        const pocket = new THREE.Mesh(
+          new THREE.BoxGeometry(0.12, 0.22, 0.28),
+          suitDarkMat
+        );
+        pocket.position.set(side * 0.48, 0.68, 0.04);
+        group.add(pocket);
+
+        // Knee bellow joint & knee scuff pad
+        const kneePad = new THREE.Mesh(
+          new THREE.BoxGeometry(0.26, 0.16, 0.14),
+          suitDarkMat
+        );
+        kneePad.position.set(side * 0.32, 0.44, 0.14);
+        group.add(kneePad);
+
+        const kneeBellow = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.22, 0.22, 0.12, 12),
+          jointBellowMat
+        );
+        kneeBellow.position.set(side * 0.32, 0.44, 0);
+        group.add(kneeBellow);
+
+        // Shin / Lower leg
+        const shin = new THREE.Mesh(
+          new THREE.CapsuleGeometry(0.22, 0.42, 6, 10),
+          suitMat
+        );
+        shin.position.set(side * 0.32, 0.22, 0.02);
+        group.add(shin);
+
+        // HEAVY PLANETARY EVA BOOT
+        // Boot upper thermal gaiter
+        const bootGaiter = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.24, 0.27, 0.22, 14),
+          suitMat
+        );
+        bootGaiter.position.set(side * 0.32, 0.14, 0.06);
+        group.add(bootGaiter);
+
+        // Boot main body
+        const bootMain = new THREE.Mesh(
+          new THREE.BoxGeometry(0.42, 0.18, 0.68),
+          suitDarkMat
+        );
+        bootMain.position.set(side * 0.32, 0.09, 0.14);
+        group.add(bootMain);
+
+        // Boot heavy treaded sole (grips planet surface)
+        const bootSole = new THREE.Mesh(
+          new THREE.BoxGeometry(0.45, 0.06, 0.72),
+          new THREE.MeshStandardMaterial({ color: 0x11161d, roughness: 0.9 })
+        );
+        bootSole.position.set(side * 0.32, 0.03, 0.14);
+        group.add(bootSole);
+
+        // Heel cup & toe cap
+        const toeCap = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.21, 0.21, 0.16, 10, 1, false, 0, Math.PI),
+          metalRingMat
+        );
+        toeCap.rotation.y = -Math.PI / 2;
+        toeCap.position.set(side * 0.32, 0.1, 0.42);
+        group.add(toeCap);
+      }
+
+      return group;
+    }
+
+    const player = makeAstronaut();
+    player.visible = false;
+    scene.add(player);
+
+    /* ═══════════════════════════════════════════
+       ALIEN (Scary, unique per planet)
+    ═══════════════════════════════════════════ */
+    function makeAlien(skinColor = 0x3a5a4a, eyeColor = 0x00ff44) {
+      const g = new THREE.Group();
+
+      const skin = new THREE.MeshStandardMaterial({
+        color: skinColor, roughness: 0.5,
+        emissive: new THREE.Color(skinColor).multiplyScalar(0.15),
+        emissiveIntensity: 0.3
+      });
+      const boneMat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(skinColor).lerp(new THREE.Color(0x000000), 0.3),
+        roughness: 0.4, metalness: 0.2
+      });
+      const eyeMat = new THREE.MeshStandardMaterial({
+        color: 0x050505, roughness: 0.05, metalness: 0.6
+      });
+      const eyeGlow = new THREE.MeshStandardMaterial({
+        color: eyeColor,
+        emissive: eyeColor,
+        emissiveIntensity: 2.5
+      });
+      const teethMat = new THREE.MeshStandardMaterial({
+        color: 0xe8e0d0, roughness: 0.3
+      });
+
+      // Body (hunched, alien proportions)
+      const body = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.65, 1.0, 6, 12),
+        skin
+      );
+      body.position.y = 1.3;
+      body.rotation.x = 0.15; // slightly hunched
+      g.add(body);
+
+      // Ribcage texture (bumps)
+      for (let i = 0; i < 5; i++) {
+        const rib = new THREE.Mesh(
+          new THREE.TorusGeometry(0.5, 0.04, 6, 16, Math.PI),
+          boneMat
+        );
+        rib.position.set(0, 1.7 - i * 0.18, 0.3);
+        rib.rotation.y = Math.PI;
+        g.add(rib);
+      }
+
+      // Head (elongated, scary)
+      const head = new THREE.Mesh(
+        new THREE.SphereGeometry(0.9, 24, 20),
+        skin
+      );
+      head.scale.set(1.15, 1.35, 0.95);
+      head.position.y = 2.8;
+      g.add(head);
+
+      // Horns
+      for (const side of [-1, 1]) {
+        const horn = new THREE.Mesh(
+          new THREE.ConeGeometry(0.12, 0.8, 8),
+          boneMat
+        );
+        horn.position.set(side * 0.55, 3.5, -0.1);
+        horn.rotation.z = side * 0.35;
+        horn.rotation.x = -0.2;
+        g.add(horn);
+
+        // Smaller secondary horns
+        const horn2 = new THREE.Mesh(
+          new THREE.ConeGeometry(0.07, 0.4, 6),
+          boneMat
+        );
+        horn2.position.set(side * 0.35, 3.45, 0.2);
+        horn2.rotation.z = side * 0.5;
+        g.add(horn2);
+      }
+
+      // Eyes (large, menacing)
+      for (const side of [-1, 1]) {
+        // Eye socket (dark hollow)
+        const socket = new THREE.Mesh(
+          new THREE.SphereGeometry(0.28, 16, 14),
+          new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1 })
+        );
+        socket.position.set(side * 0.42, 2.95, 0.65);
+        g.add(socket);
+
+        // Eye
+        const eye = new THREE.Mesh(
+          new THREE.SphereGeometry(0.22, 16, 14),
+          eyeMat
+        );
+        eye.scale.set(1.3, 0.8, 0.6);
+        eye.position.set(side * 0.42, 2.95, 0.72);
+        g.add(eye);
+
+        // Pupil (glowing slit)
+        const pupil = new THREE.Mesh(
+          new THREE.SphereGeometry(0.08, 10, 8),
+          eyeGlow
+        );
+        pupil.scale.set(0.4, 1.2, 0.5);
+        pupil.position.set(side * 0.42, 2.95, 0.95);
+        g.add(pupil);
+
+        // Eye glow point light
+        const eyeLight = new THREE.PointLight(eyeColor, 0.5, 5);
+        eyeLight.position.set(side * 0.42, 2.95, 1.1);
+        g.add(eyeLight);
+      }
+
+      // Mouth (scary grin)
+      const jaw = new THREE.Mesh(
+        new THREE.BoxGeometry(0.5, 0.12, 0.25),
+        new THREE.MeshStandardMaterial({ color: 0x1a0505, roughness: 0.2 })
+      );
+      jaw.position.set(0, 2.5, 0.72);
+      g.add(jaw);
+
+      // Teeth
+      for (let i = 0; i < 6; i++) {
+        const tooth = new THREE.Mesh(
+          new THREE.ConeGeometry(0.03, 0.12, 4),
+          teethMat
+        );
+        tooth.position.set(-0.15 + i * 0.06, 2.44, 0.75);
+        tooth.rotation.x = Math.PI;
+        g.add(tooth);
+      }
+
+      // Arms (long, bony)
+      for (const side of [-1, 1]) {
+        const upperArm = new THREE.Mesh(
+          new THREE.CapsuleGeometry(0.12, 0.75, 4, 8),
+          skin
+        );
+        upperArm.position.set(side * 0.8, 1.6, 0);
+        upperArm.rotation.z = side * -0.25;
+        g.add(upperArm);
+
+        const lowerArm = new THREE.Mesh(
+          new THREE.CapsuleGeometry(0.1, 0.7, 4, 8),
+          skin
+        );
+        lowerArm.position.set(side * 0.95, 0.95, 0.15);
+        g.add(lowerArm);
+
+        // Claws
+        for (let f = 0; f < 3; f++) {
+          const claw = new THREE.Mesh(
+            new THREE.ConeGeometry(0.03, 0.2, 4),
+            boneMat
+          );
+          claw.position.set(
+            side * 0.95 + (f - 1) * 0.06,
+            0.55,
+            0.2 + f * 0.04
+          );
+          claw.rotation.x = 0.5;
+          g.add(claw);
+        }
+
+        // Legs
+        const leg = new THREE.Mesh(
+          new THREE.CapsuleGeometry(0.18, 0.55, 4, 8),
+          skin
+        );
+        leg.position.set(side * 0.3, 0.45, 0);
+        g.add(leg);
+
+        // Feet (clawed)
+        const foot = new THREE.Mesh(
+          new THREE.BoxGeometry(0.3, 0.12, 0.45),
+          skin
+        );
+        foot.position.set(side * 0.3, 0.1, 0.1);
+        g.add(foot);
+      }
+
+      // Spinal ridges
+      for (let i = 0; i < 6; i++) {
+        const spike = new THREE.Mesh(
+          new THREE.ConeGeometry(0.05, 0.25, 4),
+          boneMat
+        );
+        spike.position.set(0, 1.4 + i * 0.28, -0.5);
+        spike.rotation.x = -0.4;
+        g.add(spike);
+      }
+
+      return g;
+    }
+
+    const alien = makeAlien();
+    alien.visible = false;
+    scene.add(alien);
+
+    /* ═══════════════════════════════════════════
+       SPEED LINES (warp effect)
+    ═══════════════════════════════════════════ */
+    const speedCanvas = document.getElementById("speedLines");
+    const sctx = speedCanvas.getContext("2d");
+    speedCanvas.width = window.innerWidth;
+    speedCanvas.height = window.innerHeight;
+
+    function drawSpeedLines(intensity) {
+      sctx.clearRect(0, 0, speedCanvas.width, speedCanvas.height);
+      if (intensity <= 0) return;
+
+      const cx = speedCanvas.width / 2;
+      const cy = speedCanvas.height / 2;
+
+      for (let i = 0; i < 60 * intensity; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const r1 = 50 + Math.random() * 200;
+        const r2 = r1 + 100 + Math.random() * 300;
+        sctx.beginPath();
+        sctx.moveTo(cx + Math.cos(angle) * r1, cy + Math.sin(angle) * r1);
+        sctx.lineTo(cx + Math.cos(angle) * r2, cy + Math.sin(angle) * r2);
+        sctx.strokeStyle = `rgba(91,241,255,${0.05 + Math.random() * 0.15 * intensity})`;
+        sctx.lineWidth = 0.5 + Math.random() * 1.5;
+        sctx.stroke();
+      }
+    }
+
+    /* ═══════════════════════════════════════════
+       GAME STATE
+    ═══════════════════════════════════════════ */
+    let mode = "space"; // space, traveling, orbiting, walking
+    let targetPlanet = null;
+    let flight = null;
+    let dialogOpen = false;
+    let keys = {};
+    let toastTimer;
+    let fuel = 100;
+    let walkAnimTime = 0;
+
+    const statusEl = document.getElementById("status");
+    const infoEl = document.getElementById("info");
+    const dialogEl = document.getElementById("dialog");
+    const toastEl = document.getElementById("toast");
+    const actionBtn = document.getElementById("mainAction");
+    const returnBtn = document.getElementById("returnBtn");
+    const fuelBar = document.getElementById("fuel-bar");
+    const loadBar = document.getElementById("loadBar");
+
+    /* ═══════════════════════════════════════════
+       WEB AUDIO PROCEDURAL SOUND ENGINE
+    ═══════════════════════════════════════════ */
+    const SpaceAudio = {
+      ctx: null,
+      masterGain: null,
+      isMuted: false,
+      droneGain: null,
+      droneOsc1: null,
+      droneOsc2: null,
+      engineNoise: null,
+      engineGain: null,
+      engineFilter: null,
+      engineOsc1: null,
+      engineOsc2: null,
+      stormNoise: null,
+      stormGain: null,
+      stormFilter: null,
+      stormLFO: null,
+      stormRumbleOsc: null,
+      stormRumbleGain: null,
+      lastFootstepTime: 0,
+
+      init() {
+        if (this.ctx) return;
+        try {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (!AudioContextClass) return;
+          this.ctx = new AudioContextClass();
+
+          // Master Gain
+          this.masterGain = this.ctx.createGain();
+          this.masterGain.gain.setValueAtTime(0.7, this.ctx.currentTime);
+          this.masterGain.connect(this.ctx.destination);
+
+          // 1. Cosmic Ambient Space Drone
+          this.droneGain = this.ctx.createGain();
+          this.droneGain.gain.setValueAtTime(0.035, this.ctx.currentTime);
+          this.droneGain.connect(this.masterGain);
+
+          this.droneOsc1 = this.ctx.createOscillator();
+          this.droneOsc1.type = "sine";
+          this.droneOsc1.frequency.setValueAtTime(55, this.ctx.currentTime);
+          this.droneOsc1.connect(this.droneGain);
+          this.droneOsc1.start();
+
+          this.droneOsc2 = this.ctx.createOscillator();
+          this.droneOsc2.type = "sine";
+          this.droneOsc2.frequency.setValueAtTime(82.5, this.ctx.currentTime);
+          this.droneOsc2.connect(this.droneGain);
+          this.droneOsc2.start();
+
+          // 2. Rocket Engine Roar (Jet Hiss + Low Turbine Rumble)
+          this.setupEngineSound();
+
+          // 3. Planetary Storm & Wind System
+          this.setupStormSound();
+
+        } catch (e) {
+          console.warn("Audio Context init error:", e);
+        }
+      },
+
+      createNoiseBuffer() {
+        const bufferSize = this.ctx.sampleRate * 2;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const output = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          output[i] = Math.random() * 2 - 1;
+        }
+        return buffer;
+      },
+
+      setupEngineSound() {
+        const noiseBuf = this.createNoiseBuffer();
+        this.engineNoise = this.ctx.createBufferSource();
+        this.engineNoise.buffer = noiseBuf;
+        this.engineNoise.loop = true;
+
+        this.engineFilter = this.ctx.createBiquadFilter();
+        this.engineFilter.type = "lowpass";
+        this.engineFilter.frequency.setValueAtTime(280, this.ctx.currentTime);
+        this.engineFilter.Q.setValueAtTime(2.2, this.ctx.currentTime);
+
+        this.engineGain = this.ctx.createGain();
+        this.engineGain.gain.setValueAtTime(0, this.ctx.currentTime); // silent initially
+
+        this.engineNoise.connect(this.engineFilter);
+        this.engineFilter.connect(this.engineGain);
+
+        // Low rumble oscillators for powerful rocket vibrations
+        this.engineOsc1 = this.ctx.createOscillator();
+        this.engineOsc1.type = "sawtooth";
+        this.engineOsc1.frequency.setValueAtTime(58, this.ctx.currentTime);
+
+        this.engineOsc2 = this.ctx.createOscillator();
+        this.engineOsc2.type = "sawtooth";
+        this.engineOsc2.frequency.setValueAtTime(87, this.ctx.currentTime);
+
+        const rumbleFilter = this.ctx.createBiquadFilter();
+        rumbleFilter.type = "lowpass";
+        rumbleFilter.frequency.setValueAtTime(140, this.ctx.currentTime);
+
+        this.engineOsc1.connect(rumbleFilter);
+        this.engineOsc2.connect(rumbleFilter);
+        rumbleFilter.connect(this.engineGain);
+
+        this.engineGain.connect(this.masterGain);
+
+        this.engineNoise.start();
+        this.engineOsc1.start();
+        this.engineOsc2.start();
+      },
+
+      setupStormSound() {
+        const stormNoiseBuf = this.createNoiseBuffer();
+        this.stormNoise = this.ctx.createBufferSource();
+        this.stormNoise.buffer = stormNoiseBuf;
+        this.stormNoise.loop = true;
+
+        this.stormFilter = this.ctx.createBiquadFilter();
+        this.stormFilter.type = "bandpass";
+        this.stormFilter.frequency.setValueAtTime(350, this.ctx.currentTime);
+        this.stormFilter.Q.setValueAtTime(3.0, this.ctx.currentTime);
+
+        this.stormGain = this.ctx.createGain();
+        this.stormGain.gain.setValueAtTime(0, this.ctx.currentTime); // silent initially
+
+        this.stormNoise.connect(this.stormFilter);
+        this.stormFilter.connect(this.stormGain);
+
+        // LFO for atmospheric wind gusts
+        this.stormLFO = this.ctx.createOscillator();
+        this.stormLFO.type = "sine";
+        this.stormLFO.frequency.setValueAtTime(0.35, this.ctx.currentTime); // natural wind swell
+        const lfoGain = this.ctx.createGain();
+        lfoGain.gain.setValueAtTime(140, this.ctx.currentTime);
+        this.stormLFO.connect(lfoGain);
+        lfoGain.connect(this.stormFilter.frequency);
+        this.stormLFO.start();
+
+        // Deep sub-bass rumble for turbulent giant planet atmospheres
+        this.stormRumbleOsc = this.ctx.createOscillator();
+        this.stormRumbleOsc.type = "triangle";
+        this.stormRumbleOsc.frequency.setValueAtTime(42, this.ctx.currentTime);
+        this.stormRumbleGain = this.ctx.createGain();
+        this.stormRumbleGain.gain.setValueAtTime(0, this.ctx.currentTime);
+        this.stormRumbleOsc.connect(this.stormRumbleGain);
+        this.stormRumbleGain.connect(this.stormGain);
+        this.stormRumbleOsc.start();
+
+        this.stormGain.connect(this.masterGain);
+        this.stormNoise.start();
+      },
+
+      startEngine() {
+        if (!this.ctx) this.init();
+        if (!this.ctx || !this.engineGain) return;
+        const t = this.ctx.currentTime;
+        this.engineGain.gain.cancelScheduledValues(t);
+        this.engineGain.gain.setTargetAtTime(0.24, t, 0.2);
+        this.engineFilter.frequency.cancelScheduledValues(t);
+        this.engineFilter.frequency.setTargetAtTime(450, t, 0.25);
+      },
+
+      setEnginePitch(warpProgress) {
+        if (!this.ctx || !this.engineFilter) return;
+        const t = this.ctx.currentTime;
+        const freq = 300 + warpProgress * 650;
+        this.engineFilter.frequency.setValueAtTime(freq, t);
+        if (this.engineOsc1) {
+          this.engineOsc1.frequency.setValueAtTime(58 + warpProgress * 45, t);
+          this.engineOsc2.frequency.setValueAtTime(87 + warpProgress * 68, t);
+        }
+      },
+
+      stopEngine() {
+        if (!this.ctx || !this.engineGain) return;
+        const t = this.ctx.currentTime;
+        this.engineGain.gain.cancelScheduledValues(t);
+        this.engineGain.gain.setTargetAtTime(0, t, 0.35);
+      },
+
+      startPlanetStorm(profile) {
+        if (!this.ctx) this.init();
+        if (!this.ctx || !this.stormGain || !profile) return;
+        const t = this.ctx.currentTime;
+        this.stormFilter.frequency.cancelScheduledValues(t);
+        this.stormFilter.frequency.setValueAtTime(profile.freq || 350, t);
+        this.stormFilter.Q.setValueAtTime(profile.q || 3.0, t);
+
+        this.stormGain.gain.cancelScheduledValues(t);
+        this.stormGain.gain.setTargetAtTime(profile.gain || 0.16, t, 0.45);
+
+        if (this.stormRumbleGain) {
+          this.stormRumbleGain.gain.cancelScheduledValues(t);
+          this.stormRumbleGain.gain.setTargetAtTime(profile.rumble || 0.05, t, 0.45);
+        }
+      },
+
+      stopPlanetStorm() {
+        if (!this.ctx || !this.stormGain) return;
+        const t = this.ctx.currentTime;
+        this.stormGain.gain.cancelScheduledValues(t);
+        this.stormGain.gain.setTargetAtTime(0, t, 0.4);
+        if (this.stormRumbleGain) {
+          this.stormRumbleGain.gain.cancelScheduledValues(t);
+          this.stormRumbleGain.gain.setTargetAtTime(0, t, 0.4);
+        }
+      },
+
+      playLandingThud() {
+        if (!this.ctx) this.init();
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(130, t);
+        osc.frequency.exponentialRampToValueAtTime(32, t + 0.38);
+
+        gain.gain.setValueAtTime(0.42, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.42);
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(t);
+        osc.stop(t + 0.45);
+
+        // Ground gravel crunch burst
+        const crunch = this.ctx.createBufferSource();
+        crunch.buffer = this.createNoiseBuffer();
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = "lowpass";
+        filter.frequency.setValueAtTime(420, t);
+        const crunchGain = this.ctx.createGain();
+        crunchGain.gain.setValueAtTime(0.25, t);
+        crunchGain.gain.exponentialRampToValueAtTime(0.001, t + 0.32);
+
+        crunch.connect(filter);
+        filter.connect(crunchGain);
+        crunchGain.connect(this.masterGain);
+        crunch.start(t);
+        crunch.stop(t + 0.35);
+      },
+
+      playFootstep() {
+        if (!this.ctx) this.init();
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        if (t - this.lastFootstepTime < 0.32) return;
+        this.lastFootstepTime = t;
+
+        // Soft boot thump
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(75 + Math.random() * 20, t);
+        osc.frequency.exponentialRampToValueAtTime(28, t + 0.08);
+
+        gain.gain.setValueAtTime(0.12, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(t);
+        osc.stop(t + 0.1);
+
+        // Surface dust grit scuff
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.createNoiseBuffer();
+        const bpf = this.ctx.createBiquadFilter();
+        bpf.type = "bandpass";
+        bpf.frequency.setValueAtTime(550 + Math.random() * 150, t);
+        bpf.Q.setValueAtTime(2.2, t);
+
+        const scuffGain = this.ctx.createGain();
+        scuffGain.gain.setValueAtTime(0.07, t);
+        scuffGain.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+
+        noise.connect(bpf);
+        bpf.connect(scuffGain);
+        scuffGain.connect(this.masterGain);
+        noise.start(t);
+        noise.stop(t + 0.08);
+      },
+
+      playAlienChime() {
+        if (!this.ctx) this.init();
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        const freqs = [196, 261.6, 392, 523.2];
+        freqs.forEach((f, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(f, t + idx * 0.08);
+          gain.gain.setValueAtTime(0.07, t + idx * 0.08);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + idx * 0.08 + 1.2);
+          osc.connect(gain);
+          gain.connect(this.masterGain);
+          osc.start(t + idx * 0.08);
+          osc.stop(t + idx * 0.08 + 1.3);
+        });
+      },
+
+      playBeep() {
+        if (!this.ctx) this.init();
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(880, t);
+        osc.frequency.setValueAtTime(1320, t + 0.04);
+        gain.gain.setValueAtTime(0.06, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(t);
+        osc.stop(t + 0.12);
+      },
+
+      toggleSound() {
+        if (!this.ctx) this.init();
+        this.isMuted = !this.isMuted;
+        if (this.masterGain && this.ctx) {
+          const t = this.ctx.currentTime;
+          this.masterGain.gain.setTargetAtTime(this.isMuted ? 0 : 0.7, t, 0.05);
+        }
+        const btn = document.getElementById("soundToggleBtn");
+        if (btn) {
+          if (this.isMuted) {
+            btn.innerHTML = "🔇 SUARA OFF";
+            btn.classList.add("muted");
+          } else {
+            btn.innerHTML = "🔊 SUARA ON";
+            btn.classList.remove("muted");
+          }
+        }
+      }
+    };
+
+    /* ═══════════════════════════════════════════
+       ALIEN SPEECH SYNTHESIS (INDONESIAN TTS)
+    ═══════════════════════════════════════════ */
+    const AlienSpeech = {
+      utterance: null,
+
+      speak(text, onStatus) {
+        if (!("speechSynthesis" in window)) {
+          if (onStatus) onStatus("Browser tidak mendukung Web Speech.");
+          return;
+        }
+
+        window.speechSynthesis.cancel();
+
+        const utt = new SpeechSynthesisUtterance(text);
+        utt.lang = "id-ID";
+
+        // Search for Indonesian voice
+        const voices = window.speechSynthesis.getVoices();
+        const idVoice = voices.find(v => v.lang === "id-ID" || v.lang.startsWith("id") || v.lang.toLowerCase().includes("indonesia"));
+        if (idVoice) utt.voice = idVoice;
+
+        // Authoritative deep scary alien character
+        utt.rate = 0.88;
+        utt.pitch = 0.68;
+
+        utt.onstart = () => {
+          if (onStatus) onStatus("berbicara");
+        };
+        utt.onend = () => {
+          if (onStatus) onStatus("selesai");
+        };
+        utt.onerror = () => {
+          if (onStatus) onStatus("selesai");
+        };
+
+        this.utterance = utt;
+        window.speechSynthesis.speak(utt);
+      },
+
+      stop() {
+        if ("speechSynthesis" in window) {
+          window.speechSynthesis.cancel();
+        }
+      }
+    };
+
+    /* ═══════════════════════════════════════════
+       UI FUNCTIONS
+    ═══════════════════════════════════════════ */
+    function toast(text) {
+      toastEl.textContent = text;
+      toastEl.style.display = "block";
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toastEl.style.display = "none", 3500);
+    }
+
+    function showInfo(p) {
+      let statsHTML = "";
+      if (p.stats) {
+        statsHTML = '<div class="stat-grid">';
+        for (const [key, val] of Object.entries(p.stats)) {
+          statsHTML += `<div class="stat-item"><div class="label">${key.charAt(0).toUpperCase() + key.slice(1)}</div><div class="value">${val}</div></div>`;
+        }
+        statsHTML += "</div>";
+      }
+
+      infoEl.innerHTML = `
+        <h3>📡 DATA EKSPEDISI: ${p.name.toUpperCase()}</h3>
+        ${statsHTML}
+        <p>${p.info}</p>
+        <p style="margin-top:10px; padding-top:8px; border-top:1px solid rgba(255,255,255,.06)">
+          <span style="color:#6a9ec5; font-size:11px">⚠ Makhluk yang ditemui adalah karakter fiksi. Fakta planet diringkas dari sumber NASA.</span>
+        </p>
+        <p><a href="${p.source}" target="_blank" rel="noopener">📖 Baca referensi NASA ↗</a></p>`;
+      infoEl.style.display = "block";
+    }
+
+    function closeDialog() {
+      dialogOpen = false;
+      dialogEl.style.display = "none";
+      AlienSpeech.stop();
+    }
+
+    function openAlienDialog() {
+      if (!targetPlanet || dialogOpen) return;
+      dialogOpen = true;
+
+      SpaceAudio.playAlienChime();
+
+      dialogEl.innerHTML = `
+        <button class="close-btn" id="dialogCloseBtn">&times;</button>
+        <div class="speaker">
+          <div class="speaker-icon">👁</div>
+          <div class="speaker-name">${targetPlanet.alienName} — Penghuni ${targetPlanet.name}</div>
+        </div>
+        <div class="alien-text">"${targetPlanet.alien}"</div>
+        <div class="tts-bar">
+          <div class="tts-status-box" id="ttsStatus">
+            <span class="tts-pulse"></span>
+            <span>🔊 Makhluk sedang berbicara...</span>
+          </div>
+          <div class="tts-actions">
+            <button class="tts-btn" id="replayVoiceBtn">🔊 Ulangi Suara</button>
+            <button class="tts-btn" id="stopVoiceBtn">⏹ Berhenti</button>
+          </div>
+        </div>
+        <div class="note">
+          ℹ️ Suara alien otomatis berbahasa Indonesia via Web Speech API. Fakta planet diverifikasi dari data NASA.
+        </div>`;
+      dialogEl.style.display = "block";
+
+      const ttsStatusEl = document.getElementById("ttsStatus");
+      function updateSpeechStatus(state) {
+        if (!ttsStatusEl) return;
+        if (state === "berbicara") {
+          ttsStatusEl.innerHTML = '<span class="tts-pulse"></span><span>🔊 Makhluk sedang berbicara...</span>';
+        } else {
+          ttsStatusEl.innerHTML = '<span>🔇 Suara selesai</span>';
+        }
+      }
+
+      // Start Indonesian speech
+      AlienSpeech.speak(targetPlanet.alien, updateSpeechStatus);
+
+      // Dialog buttons
+      document.getElementById("dialogCloseBtn").addEventListener("click", closeDialog);
+      document.getElementById("replayVoiceBtn").addEventListener("click", () => {
+        AlienSpeech.speak(targetPlanet.alien, updateSpeechStatus);
+      });
+      document.getElementById("stopVoiceBtn").addEventListener("click", () => {
+        AlienSpeech.stop();
+        updateSpeechStatus("selesai");
+      });
+
+      showInfo(targetPlanet);
+    }
+
+    function getPlanetWorldPos(p) {
+      const worldPos = new THREE.Vector3();
+      p.mesh.getWorldPosition(worldPos);
+      return worldPos;
+    }
+
+    function land() {
+      if (!targetPlanet) return;
+      mode = "walking";
+
+      const worldPos = getPlanetWorldPos(targetPlanet);
+      const surfaceY = worldPos.y + targetPlanet.size + 0.06;
+
+      // Show terrain ground
+      if (targetPlanet._terrain) targetPlanet._terrain.visible = true;
+      if (targetPlanet._terrainDetails) targetPlanet._terrainDetails.visible = true;
+
+      player.position.set(worldPos.x, surfaceY, worldPos.z);
+      player.rotation.y = Math.PI * 0.55; // Face towards alien
+      player.visible = true;
+
+      // Rebuild alien with planet-specific colors
+      if (alien.copy) scene.remove(alien.copy);
+      const newAlien = makeAlien(targetPlanet.alienColor, targetPlanet.alienEyeColor);
+      newAlien.position.set(worldPos.x + 7.5, surfaceY, worldPos.z - 3);
+      newAlien.visible = true;
+      scene.add(newAlien);
+      alien.copy = newAlien;
+
+      // Park shuttle realistically on the left landing sector (not blocking camera)
+      shuttle.position.set(worldPos.x - 13, surfaceY + 1.8, worldPos.z - 2);
+      shuttle.rotation.set(0, Math.PI * 0.25, 0);
+
+      // Frame camera cleanly behind player looking towards alien and horizon
+      camera.position.set(worldPos.x - 1.5, surfaceY + 3.6, worldPos.z + 7.5);
+      camera.lookAt(worldPos.x + 3, surfaceY + 1.5, worldPos.z - 2);
+
+      flamesActive = false;
+
+      // 1. DAYTIME ATMOSPHERE & SKY WHEN LANDED
+      scene.background = new THREE.Color(targetPlanet.skyColor);
+      scene.fog = new THREE.FogExp2(targetPlanet.fogColor, targetPlanet.fogDensity || 0.009);
+
+      // 2. DAYTIME ILLUMINATION
+      landingLight.color.setHex(targetPlanet.sunLightColor || 0xffffff);
+      landingLight.intensity = 4.5;
+      landingLight.position.set(worldPos.x, surfaceY + 20, worldPos.z);
+
+      ambientLight.color.setHex(targetPlanet.skyColor);
+      ambientLight.intensity = 2.6;
+
+      hemiLight.color.setHex(targetPlanet.skyColor);
+      hemiLight.groundColor.setHex(targetPlanet.color);
+      hemiLight.intensity = 2.0;
+
+      // 3. SOUND EFFECTS (LANDING THUD & PLANET STORM/WIND)
+      SpaceAudio.playLandingThud();
+      SpaceAudio.startPlanetStorm(targetPlanet.windProfile);
+
+      statusEl.textContent = `🚶 Berjalan di ${targetPlanet.name} (Siang Hari)`;
+      actionBtn.textContent = "💬 BICARA (E)";
+      returnBtn.style.display = "block";
+      toast(`Taufik mendarat di siang hari ${targetPlanet.name}! [${targetPlanet.windProfile ? targetPlanet.windProfile.name : "Suasana Planet"}]`);
+    }
+
+    function startFlight(p) {
+      if (mode === "traveling") {
+        toast("Pesawat sedang dalam perjalanan!");
+        return;
+      }
+      if (mode === "walking") {
+        toast("Kembali ke pesawat terlebih dahulu (tekan R).");
+        return;
+      }
+
+      closeDialog();
+
+      // Clean up previous alien
+      if (alien.copy) {
+        scene.remove(alien.copy);
+        alien.copy = null;
+      }
+
+      targetPlanet = p;
+      mode = "traveling";
+      infoEl.style.display = "none";
+      returnBtn.style.display = "none";
+
+      const targetWorldPos = getPlanetWorldPos(p);
+      const start = shuttle.position.clone();
+      const end = targetWorldPos.clone().add(new THREE.Vector3(0, p.size + 12, 15));
+
+      const mid = start.clone().lerp(end, 0.5);
+      mid.y += 50 + start.distanceTo(end) * 0.15;
+
+      flight = { start, end, mid, time: 0, duration: 5.5, planet: p };
+      flamesActive = true;
+
+      // Start rocket engine roar sound & UI beep
+      SpaceAudio.playBeep();
+      SpaceAudio.startEngine();
+
+      fuel = Math.max(10, fuel - 8);
+      fuelBar.style.width = fuel + "%";
+
+      statusEl.textContent = `🚀 Terbang menuju ${p.name}...`;
+      actionBtn.textContent = "⏳ DALAM PERJALANAN...";
+      toast(`Perjalanan menuju ${p.name} dimulai! Deru mesin roket menyala.`);
+    }
+
+    function returnToOrbit() {
+      if (mode !== "walking") return;
+      closeDialog();
+      player.visible = false;
+      if (alien.copy) {
+        scene.remove(alien.copy);
+        alien.copy = null;
+      }
+      alien.visible = false;
+      mode = "space";
+      infoEl.style.display = "none";
+
+      // Hide terrain
+      if (targetPlanet._terrain) targetPlanet._terrain.visible = false;
+      if (targetPlanet._terrainDetails) targetPlanet._terrainDetails.visible = false;
+
+      // Stop storm wind sound & speech
+      SpaceAudio.stopPlanetStorm();
+      AlienSpeech.stop();
+
+      // Restore dark space background & remove fog
+      scene.background.setHex(0x000005);
+      scene.fog = null;
+
+      // Restore space lighting
+      landingLight.intensity = 0;
+      ambientLight.color.setHex(0x3a5070);
+      ambientLight.intensity = 1.2;
+      hemiLight.color.setHex(0x88aadd);
+      hemiLight.groundColor.setHex(0x445566);
+      hemiLight.intensity = 0.8;
+
+      const worldPos = getPlanetWorldPos(targetPlanet);
+      shuttle.position.set(worldPos.x, worldPos.y + targetPlanet.size + 12, worldPos.z + 15);
+
+      statusEl.textContent = `📍 Mengorbit dekat ${targetPlanet.name}`;
+      actionBtn.textContent = "🪐 PILIH PLANET";
+      returnBtn.style.display = "none";
+      toast("Taufik kembali ke orbit luar angkasa.");
+    }
+
+    /* ═══════════════════════════════════════════
+       PLANET BUTTONS
+    ═══════════════════════════════════════════ */
+    planets.forEach(p => {
+      const btn = document.createElement("button");
+      btn.className = "planetBtn";
+      const dot = document.createElement("span");
+      dot.className = "dot";
+      dot.style.background = "#" + new THREE.Color(p.color).getHexString();
+      btn.appendChild(dot);
+      btn.appendChild(document.createTextNode(p.name));
+      btn.addEventListener("click", () => startFlight(p));
+      document.getElementById("planetList").appendChild(btn);
+    });
+
+    /* ═══════════════════════════════════════════
+       EVENT HANDLERS
+    ═══════════════════════════════════════════ */
+    actionBtn.addEventListener("click", () => {
+      if (mode === "walking") {
+        if (alien.copy) {
+          const dx = player.position.x - alien.copy.position.x;
+          const dz = player.position.z - alien.copy.position.z;
+          if (Math.hypot(dx, dz) < 12) openAlienDialog();
+          else toast("Dekati penghuni planet terlebih dahulu.");
+        }
+      } else if (mode === "orbiting") {
+        land();
+      }
+    });
+
+    returnBtn.addEventListener("click", returnToOrbit);
+
+    window.addEventListener("keydown", e => {
+      keys[e.key.toLowerCase()] = true;
+
+      if (e.key.toLowerCase() === "e") {
+        if (mode === "orbiting") land();
+        else if (mode === "walking" && alien.copy) {
+          const dx = player.position.x - alien.copy.position.x;
+          const dz = player.position.z - alien.copy.position.z;
+          if (Math.hypot(dx, dz) < 12) openAlienDialog();
+          else toast("Dekati penghuni planet terlebih dahulu.");
+        }
+      }
+
+      if (e.key.toLowerCase() === "r" && mode === "walking") {
+        returnToOrbit();
+      }
+
+      if (e.key.toLowerCase() === "m") {
+        SpaceAudio.toggleSound();
+      }
+
+      if (e.key === "Escape") closeDialog();
+    });
+
+    window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+    // Sound toggle button in topbar
+    const soundBtn = document.getElementById("soundToggleBtn");
+    if (soundBtn) {
+      soundBtn.addEventListener("click", () => SpaceAudio.toggleSound());
+    }
+
+    // Touch controls
+    document.querySelectorAll(".touch-btn").forEach(btn => {
+      const key = btn.dataset.key;
+      btn.addEventListener("touchstart", e => { e.preventDefault(); keys[key] = true; });
+      btn.addEventListener("touchend", e => { e.preventDefault(); keys[key] = false; });
+      btn.addEventListener("mousedown", () => keys[key] = true);
+      btn.addEventListener("mouseup", () => keys[key] = false);
+    });
+
+    /* ═══════════════════════════════════════════
+       CAMERA
+    ═══════════════════════════════════════════ */
+    camera.position.set(0, 120, 420);
+    camera.lookAt(0, 0, 0);
+
+    /* ═══════════════════════════════════════════
+       AUDIO INITIALIZATION (On first user gesture)
+    ═══════════════════════════════════════════ */
+    function triggerAudioInit() {
+      SpaceAudio.init();
+    }
+    document.addEventListener("click", triggerAudioInit, { once: true });
+    document.addEventListener("touchstart", triggerAudioInit, { once: true });
+    document.addEventListener("keydown", triggerAudioInit, { once: true });
+
+    /* ═══════════════════════════════════════════
+       LOADING
+    ═══════════════════════════════════════════ */
+    let loadProgress = 0;
+    const loadInterval = setInterval(() => {
+      loadProgress += 3 + Math.random() * 8;
+      if (loadProgress >= 100) {
+        loadProgress = 100;
+        clearInterval(loadInterval);
+        loadBar.style.width = "100%";
+        setTimeout(() => {
+          document.getElementById("loading").classList.add("fade");
+          document.getElementById("hud").style.display = "block";
+          statusEl.textContent = "🛸 Pilih planet tujuan untuk memulai ekspedisi.";
+          setTimeout(() => {
+            document.getElementById("loading").remove();
+          }, 1000);
+        }, 400);
+      }
+      loadBar.style.width = loadProgress + "%";
+    }, 80);
+
+    /* ═══════════════════════════════════════════
+       ANIMATION LOOP
+    ═══════════════════════════════════════════ */
+    const clock = new THREE.Clock();
+    let elapsedTotal = 0;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.05);
+      elapsedTotal += dt;
+
+      // Sun rotation & pulse
+      sun.mesh.rotation.y += dt * 0.03;
+      const pulse = 1 + Math.sin(elapsedTotal * 2) * 0.02;
+      sun.glows.forEach((g, i) => {
+        g.scale.setScalar(pulse + i * 0.005 * Math.sin(elapsedTotal * (3 + i)));
+      });
+
+      // Planet orbits & rotation
+      planets.forEach((p, i) => {
+        // Only orbit when not walking on this planet
+        if (mode !== "walking" || targetPlanet !== p) {
+          p._orbitAngle += p.orbitSpeed * dt * 0.1;
+          p.orbitGroup.rotation.y = p._orbitAngle;
+        }
+
+        // Planet self-rotation
+        p.mesh.rotation.y += p.rotSpeed;
+
+        // Moon orbit for Earth
+        if (p._moon) {
+          p._moon.position.x = 12 * Math.cos(elapsedTotal * 0.5);
+          p._moon.position.z = 12 * Math.sin(elapsedTotal * 0.5);
+        }
+      });
+
+      // Star twinkle
+      if (stars2.material) {
+        stars2.material.opacity = 0.4 + Math.sin(elapsedTotal * 0.5) * 0.2;
+      }
+
+      // Follow light in space mode tracks shuttle
+      if (mode === "traveling" || mode === "orbiting" || mode === "space") {
+        followLight.position.copy(shuttle.position).add(new THREE.Vector3(0, 10, 5));
+      }
+
+      // Flight animation
+      if (mode === "traveling" && flight) {
+        flight.time += dt;
+        const t = Math.min(flight.time / flight.duration, 1);
+        const eased = t < 0.5
+          ? 4 * t * t * t
+          : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+        // Recalculate target position (planet is orbiting)
+        const currentTargetPos = getPlanetWorldPos(flight.planet);
+        flight.end.copy(currentTargetPos).add(new THREE.Vector3(0, flight.planet.size + 12, 15));
+        flight.mid.copy(flight.start).lerp(flight.end, 0.5);
+        flight.mid.y = Math.max(flight.mid.y, 50 + flight.start.distanceTo(flight.end) * 0.12);
+
+        // Quadratic bezier
+        const p1 = flight.start.clone().lerp(flight.mid, eased);
+        const p2 = flight.mid.clone().lerp(flight.end, eased);
+        shuttle.position.copy(p1.clone().lerp(p2, eased));
+
+        // Orient shuttle toward destination
+        const lookTarget = p2.clone();
+        const dir = lookTarget.sub(shuttle.position).normalize();
+        if (dir.length() > 0.01) {
+          shuttle.lookAt(shuttle.position.clone().add(dir));
+        }
+
+        // Camera follows shuttle
+        const camOffset = new THREE.Vector3(0, 10, 25);
+        camOffset.applyQuaternion(shuttle.quaternion);
+        const camTarget = shuttle.position.clone().add(camOffset);
+        camera.position.lerp(camTarget, 0.04);
+        camera.lookAt(shuttle.position);
+
+        // Speed lines
+        speedCanvas.style.opacity = Math.min(1, eased * 2) * (1 - Math.max(0, (t - 0.7) / 0.3));
+        drawSpeedLines(eased * (1 - Math.max(0, (t - 0.8) / 0.2)));
+
+        // Modulate engine sound pitch based on flight curve
+        SpaceAudio.setEnginePitch(eased);
+
+        // Fuel drain
+        fuel = Math.max(5, 100 - t * 15);
+        fuelBar.style.width = fuel + "%";
+
+        if (t >= 1) {
+          flight = null;
+          mode = "orbiting";
+          flamesActive = false;
+          SpaceAudio.stopEngine();
+          speedCanvas.style.opacity = "0";
+          statusEl.textContent = `🛰 Tiba di dekat ${targetPlanet.name}`;
+          actionBtn.textContent = "🔽 MENDARAT (E)";
+          toast(`Tiba di ${targetPlanet.name}! Tekan E untuk keluar dari pesawat.`);
+        }
+      }
+
+      // Orbiting camera
+      if (mode === "orbiting" && targetPlanet) {
+        const planetPos = getPlanetWorldPos(targetPlanet);
+        const desired = planetPos.clone().add(new THREE.Vector3(
+          Math.sin(elapsedTotal * 0.15) * 20,
+          12 + Math.sin(elapsedTotal * 0.1) * 3,
+          25 + Math.cos(elapsedTotal * 0.15) * 10
+        ));
+        camera.position.lerp(desired, 0.03);
+        camera.lookAt(planetPos);
+      }
+
+      // Walking
+      if (mode === "walking") {
+        const speed = 8 * dt;
+        let mx = 0, mz = 0;
+        if (keys.w || keys.arrowup) mz -= 1;
+        if (keys.s || keys.arrowdown) mz += 1;
+        if (keys.a || keys.arrowleft) mx -= 1;
+        if (keys.d || keys.arrowright) mx += 1;
+
+        const isMoving = mx !== 0 || mz !== 0;
+
+        if (isMoving) {
+          const len = Math.hypot(mx, mz);
+          mx /= len; mz /= len;
+          player.position.x += mx * speed;
+          player.position.z += mz * speed;
+          player.rotation.y = Math.atan2(mx, mz);
+
+          // Walk bob & footsteps sound
+          walkAnimTime += dt * 8;
+          SpaceAudio.playFootstep();
+        }
+
+        // Constrain to landing area (bigger area now with terrain)
+        const planetPos = getPlanetWorldPos(targetPlanet);
+        const dx = player.position.x - planetPos.x;
+        const dz = player.position.z - planetPos.z;
+        const distance = Math.hypot(dx, dz);
+
+        if (distance > 80) {
+          player.position.x = planetPos.x + dx / distance * 80;
+          player.position.z = planetPos.z + dz / distance * 80;
+        }
+
+        // Keep on planet surface
+        const surfaceY = planetPos.y + targetPlanet.size + 0.06;
+        player.position.y = surfaceY + (isMoving ? Math.sin(walkAnimTime) * 0.04 : 0);
+
+        // Follow light tracks player
+        followLight.position.set(player.position.x, surfaceY + 12, player.position.z + 5);
+
+        // Camera follows player — lower angle to see ground
+        const camTarget = player.position.clone().add(new THREE.Vector3(0, 3.5, 8));
+        camera.position.lerp(camTarget, 0.08);
+        camera.lookAt(player.position.clone().add(new THREE.Vector3(0, 1.2, 0)));
+
+        // Alien idle animation
+        if (alien.copy) {
+          alien.copy.rotation.y = Math.sin(elapsedTotal * 0.4) * 0.3;
+          // Alien bobs menacingly
+          alien.copy.position.y = planetPos.y + targetPlanet.size + 0.06 + Math.sin(elapsedTotal * 1.5) * 0.08;
+
+          // Keep alien on planet surface too
+          const alienDx = alien.copy.position.x - planetPos.x;
+          const alienDz = alien.copy.position.z - planetPos.z;
+          const alienDist = Math.hypot(alienDx, alienDz);
+          if (alienDist > 14) {
+            alien.copy.position.x = planetPos.x + alienDx / alienDist * 14;
+            alien.copy.position.z = planetPos.z + alienDz / alienDist * 14;
+          }
+
+          // Alien faces player
+          const toPlayer = new THREE.Vector2(
+            player.position.x - alien.copy.position.x,
+            player.position.z - alien.copy.position.z
+          );
+          alien.copy.rotation.y = Math.atan2(toPlayer.x, toPlayer.y);
+        }
+      }
+
+      // Space overview camera
+      if (mode === "space") {
+        const spaceTarget = new THREE.Vector3(
+          Math.sin(elapsedTotal * 0.02) * 30,
+          100 + Math.sin(elapsedTotal * 0.03) * 15,
+          380 + Math.cos(elapsedTotal * 0.02) * 30
+        );
+        camera.position.lerp(spaceTarget, 0.008);
+        camera.lookAt(0, 0, 0);
+      }
+
+      // Engine flames
+      updateFlames(dt);
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    /* ═══════════════════════════════════════════
+       RESIZE
+    ═══════════════════════════════════════════ */
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      speedCanvas.width = window.innerWidth;
+      speedCanvas.height = window.innerHeight;
+    });
+  </script>
+</body>
+</html>
