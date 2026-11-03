@@ -27,6 +27,12 @@ button:focus-visible{outline:3px solid var(--cool);outline-offset:3px}
 #bb span{display:block;height:10px;margin-top:4px;background:rgba(255,255,255,.12);border:1px solid var(--hot)}
 #bb i{display:block;height:100%;width:100%;background:var(--hot)}
 #warn{position:fixed;left:0;right:0;top:36%;text-align:center;font-size:clamp(20px,5vw,34px);font-weight:700;color:var(--hot);text-shadow:0 0 14px #000;pointer-events:none}
+#camctl{position:fixed;right:14px;bottom:14px;z-index:3;pointer-events:auto;margin:0;padding:9px 14px;font-size:14px}
+#askpilot{position:fixed;left:14px;bottom:14px;z-index:4;margin:0;padding:9px 14px;font-size:14px}
+#askstatus{position:fixed;left:14px;bottom:58px;z-index:4;max-width:min(360px,55vw);padding:4px 7px;color:var(--cool);font-size:13px;line-height:1.4;text-shadow:0 1px 4px #000;background:rgba(7,9,20,.6);pointer-events:none}
+#camstatus{position:fixed;right:14px;bottom:58px;z-index:3;color:var(--cool);font-size:13px;text-shadow:0 1px 4px #000;pointer-events:none}
+#camvideo{position:fixed;right:14px;bottom:94px;width:160px;max-width:30vw;border:2px solid var(--cool);border-radius:10px;transform:scaleX(-1);z-index:2;display:none;opacity:.8}
+canvas#handoverlay{position:fixed;right:14px;bottom:94px;width:160px;max-width:30vw;height:auto;aspect-ratio:4/3;z-index:3;display:none;pointer-events:none;transform:scaleX(-1)}
 </style>
 </head>
 <body>
@@ -34,6 +40,7 @@ button:focus-visible{outline:3px solid var(--cool);outline-offset:3px}
 <div id="hud"><span id="sc">0<small>Skor</small></span><span id="lives"></span><span id="bs">0<small>Terbaik</small></span></div>
 <div id="bb" class="hide"><b>Raja Vakrath</b><span><i id="bf"></i></span></div>
 <div id="warn" class="hide"></div>
+<video id="camvideo" playsinline muted></video><canvas id="handoverlay"></canvas><div id="camstatus"></div><div id="askstatus"></div><button id="askpilot" class="ghost hide">Bertanya</button><button id="camctl" class="ghost">Gunakan keyboard</button>
 <div id="ov"><div id="card">
 <h1 id="ttl"></h1>
 <p id="msg"></p>
@@ -42,6 +49,7 @@ button:focus-visible{outline:3px solid var(--cool);outline-offset:3px}
 </div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 <script>
 (function(){
 const T=THREE, BX=11, BY=6;
@@ -178,39 +186,133 @@ function hud(){$('sc').firstChild.nodeValue=score;$('bs').firstChild.nodeValue=M
 
 // Input
 const target=new T.Vector2(0,0);const keys={};
+let handControl=false,handBusy=false,hands=null,camStream=null,pinchWasClosed=false,pinchReadyAt=0,pinchFrames=0;
+const video=$('camvideo'),handOverlay=$('handoverlay'),handDraw=handOverlay.getContext('2d'),camStatus=$('camstatus'),camButton=$('camctl');
+function drawHand(landmarks){
+  if(!video.videoWidth)return;
+  if(handOverlay.width!==video.videoWidth||handOverlay.height!==video.videoHeight){handOverlay.width=video.videoWidth;handOverlay.height=video.videoHeight;}
+  handDraw.clearRect(0,0,handOverlay.width,handOverlay.height);if(!landmarks)return;
+  handDraw.lineWidth=Math.max(3,handOverlay.width*.012);handDraw.strokeStyle='#3dff79';handDraw.fillStyle='#baffc9';
+  (window.HAND_CONNECTIONS||[]).forEach(([a,b])=>{handDraw.beginPath();handDraw.moveTo(landmarks[a].x*handOverlay.width,landmarks[a].y*handOverlay.height);handDraw.lineTo(landmarks[b].x*handOverlay.width,landmarks[b].y*handOverlay.height);handDraw.stroke();});
+  landmarks.forEach(p=>{handDraw.beginPath();handDraw.arc(p.x*handOverlay.width,p.y*handOverlay.height,Math.max(3,handOverlay.width*.014),0,Math.PI*2);handDraw.fill();});
+}
+camButton.addEventListener('click',async()=>{
+  if(handControl){handControl=false;if(camStream)camStream.getTracks().forEach(tr=>tr.stop());camStream=null;video.srcObject=null;video.style.display='none';handOverlay.style.display='none';camStatus.textContent='Mode keyboard aktif · gunakan tombol panah/WASD';camButton.textContent='Aktifkan kamera';hands=null;return;}
+  camStatus.textContent='Meminta izin kamera…';
+  try{
+    if(!window.Hands)throw new Error('Pustaka gesture tidak dapat dimuat. Periksa koneksi internet.');
+    camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:640,height:480},audio:false});initAudio();
+    video.srcObject=camStream;await video.play();
+    hands=new Hands({locateFile:file=>'https://cdn.jsdelivr.net/npm/@mediapipe/hands/'+file});
+    hands.setOptions({maxNumHands:1,modelComplexity:0,minDetectionConfidence:.65,minTrackingConfidence:.55});
+    hands.onResults(res=>{
+      handBusy=false;
+      const lm=res.multiHandLandmarks&&res.multiHandLandmarks[0];
+      if(lm){drawHand(lm);const tip=lm[8];target.set((.5-tip.x)*2*BX,(.5-tip.y)*2*BY*1.3);
+        const palm=Math.max(.001,Math.hypot(lm[0].x-lm[9].x,lm[0].y-lm[9].y));
+        const pinchRatio=Math.hypot(lm[4].x-lm[8].x,lm[4].y-lm[8].y)/palm;
+        const now=performance.now();
+        if(!pinchWasClosed){if(pinchRatio<.22)pinchFrames++;else pinchFrames=0;if(pinchFrames>=5&&now>pinchReadyAt){
+          if(state==='menu'||state==='over'||state==='paused')$('go').click();else if(state==='play'){state='paused';setEngineSound(false);$('ttl').textContent='Permainan dijeda';$('msg').textContent='Cubit ibu jari dan telunjuk lagi untuk melanjutkan.';$('sub').textContent='';$('go').textContent='Lanjut bermain';$('sk').classList.add('hide');$('ov').classList.remove('hide');}
+          pinchWasClosed=true;pinchFrames=0;pinchReadyAt=now+1200;
+        }}else if(pinchRatio>.36){pinchWasClosed=false;pinchFrames=0;}
+        camStatus.textContent=(state==='menu'||state==='over'||state==='paused')?'Arahkan telunjuk · cubit dan tahan untuk memilih / jeda':'Tangan terdeteksi · arahkan telunjuk';}
+      else{drawHand(null);pinchWasClosed=false;pinchFrames=0;camStatus.textContent='Tunjukkan tangan ke kamera';}
+    });
+    handControl=true;pinchWasClosed=false;video.style.display='block';handOverlay.style.display='block';camButton.textContent='Gunakan keyboard';camStatus.textContent='Tunjukkan tangan ke kamera';
+  }catch(err){if(camStream)camStream.getTracks().forEach(tr=>tr.stop());camStream=null;camStatus.textContent='Kamera gagal: '+(err.message||'izin ditolak');}
+});
+function handFrame(){if(handControl&&hands&&video.readyState>=2&&!handBusy){handBusy=true;hands.send({image:video}).catch(()=>{handBusy=false;});}requestAnimationFrame(handFrame);}handFrame();
 function pointer(x,y){target.set((x/innerWidth-.5)*2*BX,-(y/innerHeight-.5)*2*BY*1.3);}
-addEventListener('pointermove',e=>pointer(e.clientX,e.clientY));
-addEventListener('pointerdown',e=>pointer(e.clientX,e.clientY));
+addEventListener('pointermove',e=>{if(!handControl)pointer(e.clientX,e.clientY);});
+addEventListener('pointerdown',e=>{if(!handControl)pointer(e.clientX,e.clientY);});
 addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=1;});
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=0;});
 
 function clearAll(){[...bullets,...enemies,...sparks,...pups,...ebul].forEach(o=>scene.remove(o));if(boss)scene.remove(boss);boss=null;bullets=[];enemies=[];sparks=[];pups=[];ebul=[];}
+let audioCtx=null,audioMaster=null,engineGain=null,shotNoiseBuffer=null,engineNoiseBuffer=null;
+function initAudio(){
+  if(!audioCtx){const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
+    audioCtx=new AC();audioMaster=audioCtx.createGain();audioMaster.gain.value=.32;audioMaster.connect(audioCtx.destination);
+    shotNoiseBuffer=audioCtx.createBuffer(1,Math.floor(audioCtx.sampleRate*.32),audioCtx.sampleRate);
+    const noise=shotNoiseBuffer.getChannelData(0);for(let i=0;i<noise.length;i++){const decay=Math.pow(1-i/noise.length,2.4);noise[i]=(Math.random()*2-1)*decay;}
+    engineNoiseBuffer=audioCtx.createBuffer(1,audioCtx.sampleRate*2,audioCtx.sampleRate);const roar=engineNoiseBuffer.getChannelData(0);for(let i=0;i<roar.length;i++)roar[i]=(Math.random()*2-1)*.22;
+    const filter=audioCtx.createBiquadFilter();engineGain=audioCtx.createGain();filter.type='lowpass';filter.frequency.value=680;filter.Q.value=.8;filter.connect(engineGain);engineGain.connect(audioMaster);engineGain.gain.value=0;
+    [[54,'sine',.75],[108,'sawtooth',.24],[162,'triangle',.16],[216,'sine',.07]].forEach(([hz,type,level])=>{const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.value=hz;g.gain.value=level;o.connect(g);g.connect(filter);o.start();});
+    const rumble=audioCtx.createBufferSource(),rumbleFilter=audioCtx.createBiquadFilter(),rumbleGain=audioCtx.createGain();rumble.buffer=engineNoiseBuffer;rumble.loop=true;rumbleFilter.type='lowpass';rumbleFilter.frequency.value=900;rumbleGain.gain.value=.32;rumble.connect(rumbleFilter);rumbleFilter.connect(rumbleGain);rumbleGain.connect(filter);rumble.start();
+    const lfo=audioCtx.createOscillator(),lfoDepth=audioCtx.createGain();lfo.type='sine';lfo.frequency.value=2.4;lfoDepth.gain.value=2.5;lfo.connect(lfoDepth);lfoDepth.connect(filter.frequency);lfo.start();
+  }if(audioCtx.state==='suspended')audioCtx.resume().catch(()=>{});
+}
+function setEngineSound(on){initAudio();if(engineGain&&audioCtx){engineGain.gain.cancelScheduledValues(audioCtx.currentTime);engineGain.gain.setTargetAtTime(on ? .24 : 0,audioCtx.currentTime,.5);}}
+function playShotSound(){
+  initAudio();if(!audioCtx||!audioMaster||!shotNoiseBuffer)return;const n=audioCtx.currentTime;
+  // Tembakan sci-fi sinematik dengan transient tajam, sapuan energi, dan bass singkat.
+  const src=audioCtx.createBufferSource(),crack=audioCtx.createBiquadFilter(),cg=audioCtx.createGain();src.buffer=shotNoiseBuffer;crack.type='highpass';crack.frequency.value=1900;
+  cg.gain.setValueAtTime(.001,n);cg.gain.linearRampToValueAtTime(.48,n+.004);cg.gain.exponentialRampToValueAtTime(.001,n+.075);src.connect(crack);crack.connect(cg);cg.connect(audioMaster);src.start(n);src.stop(n+.09);
+  const o=audioCtx.createOscillator(),og=audioCtx.createGain(),tone=audioCtx.createBiquadFilter();o.type='sawtooth';o.frequency.setValueAtTime(760,n);o.frequency.exponentialRampToValueAtTime(125,n+.19);tone.type='lowpass';tone.frequency.value=1900;
+  og.gain.setValueAtTime(.001,n);og.gain.linearRampToValueAtTime(.24,n+.008);og.gain.exponentialRampToValueAtTime(.001,n+.21);o.connect(tone);tone.connect(og);og.connect(audioMaster);o.start(n);o.stop(n+.22);
+  const sub=audioCtx.createOscillator(),sg=audioCtx.createGain();sub.type='sine';sub.frequency.setValueAtTime(92,n);sub.frequency.exponentialRampToValueAtTime(42,n+.15);sg.gain.setValueAtTime(.001,n);sg.gain.linearRampToValueAtTime(.28,n+.01);sg.gain.exponentialRampToValueAtTime(.001,n+.18);sub.connect(sg);sg.connect(audioMaster);sub.start(n);sub.stop(n+.19);
+}
+function playBossExplosion(){initAudio();if(!audioCtx||!audioMaster)return;const n=audioCtx.currentTime,o=audioCtx.createOscillator(),g=audioCtx.createGain(),f=audioCtx.createBiquadFilter();
+  o.type='triangle';o.frequency.setValueAtTime(150,n);o.frequency.exponentialRampToValueAtTime(35,n+1.8);f.type='lowpass';f.frequency.setValueAtTime(1200,n);f.frequency.exponentialRampToValueAtTime(180,n+1.8);
+  g.gain.setValueAtTime(.001,n);g.gain.linearRampToValueAtTime(2.25,n+.08);g.gain.exponentialRampToValueAtTime(.001,n+1.9);o.connect(f);f.connect(g);g.connect(audioMaster);o.start(n);o.stop(n+2);
+  if(shotNoiseBuffer){const src=audioCtx.createBufferSource(),nf=audioCtx.createBiquadFilter(),ng=audioCtx.createGain();src.buffer=shotNoiseBuffer;nf.type='lowpass';nf.frequency.setValueAtTime(2600,n);nf.frequency.exponentialRampToValueAtTime(300,n+.65);ng.gain.setValueAtTime(.001,n);ng.gain.linearRampToValueAtTime(1.6,n+.03);ng.gain.exponentialRampToValueAtTime(.001,n+.7);src.connect(nf);nf.connect(ng);ng.connect(audioMaster);src.start(n);src.stop(n+.72);}
+}
 function start(){
+  if('speechSynthesis' in window)speechSynthesis.cancel();$('askpilot').classList.remove('hide');$('askstatus').textContent='';
   clearAll();score=0;lives=3;t=0;spawnT=1;inv=0;shake=0;wl=1;bossFlag=0;$('bb').classList.add('hide');target.set(0,0);ship.position.set(0,0,0);ship.visible=true;
-  state='play';$('ov').classList.add('hide');hud();
+  state='play';$('ov').classList.add('hide');hud();setEngineSound(true);
 }
 const ST=[
  ['Tahun 2487','Kekaisaran Zorg menyerbu Sabuk Orion dan menghancurkan koloni manusia satu demi satu. Pemimpinnya, Raja Vakrath, memimpin armada dari kapal induk raksasa.'],
  ['Pilot terakhir','Armada pelindung Bumi sudah habis. Tinggal skuadron Falcon, dan kamu satu-satunya pilot yang masih terbang. Misimu: tembus barisan musuh dan hancurkan sang raja.'],
- ['Misi dimulai','Gerakkan mouse atau sentuh layar untuk terbang, atau pakai panah dan WASD. Tembakan keluar otomatis.','Ambil kapsul emas yang jatuh dari musuh untuk memperkuat senjata. Kalau terkena tembakan, senjatamu turun satu tingkat.']];
+ ['Misi dimulai','Arahkan telunjuk untuk terbang dan cubit ibu jari dengan telunjuk untuk memilih tombol. Tembakan keluar otomatis.','Pilih “Gunakan keyboard” untuk bermain dengan panah atau WASD. Ambil kapsul emas untuk memperkuat senjata.']];
 let si=0;
-function story(){const s=ST[si];$('ttl').textContent=s[0];$('msg').textContent=s[1];$('sub').textContent=s[2]||'';$('go').textContent=si<ST.length-1?'Lanjut':'Mulai misi';$('sk').classList.toggle('hide',si>=ST.length-1);}
+function story(){const s=ST[si];$('ttl').textContent=s[0];$('msg').textContent=s[1];$('sub').textContent=s[2]||'';$('go').textContent=si<ST.length-1?'Lanjut':'Mulai misi';$('sk').classList.toggle('hide',si>=ST.length-1);
+  if('speechSynthesis' in window){speechSynthesis.cancel();const u=new SpeechSynthesisUtterance([s[0],s[1],s[2]||''].filter(Boolean).join('. '));u.lang='id-ID';u.rate=.95;u.pitch=1;speechSynthesis.speak(u);}
+}
 story();
-$('go').addEventListener('click',()=>{if(state==='menu'&&si<ST.length-1){si++;story();}else start();});
+$('go').addEventListener('click',()=>{if(state==='paused'){state='play';setEngineSound(true);$('ov').classList.add('hide');return;}if(state==='menu'&&si<ST.length-1){si++;story();}else start();});
 $('sk').addEventListener('click',()=>{si=ST.length-1;story();});
-addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&(state==='menu'||state==='over')&&document.activeElement!==$('go')&&document.activeElement!==$('sk')){$('go').click();}});
+addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&(state==='menu'||state==='over')&&document.activeElement!==$('go')&&document.activeElement!==$('sk')&&document.activeElement!==$('askpilot')){$('go').click();}});
+addEventListener('keydown',e=>{if((e.key==='Escape'||e.key.toLowerCase()==='p')&&(state==='play'||state==='paused')){if(state==='play'){state='paused';setEngineSound(false);$('ttl').textContent='Permainan dijeda';$('msg').textContent='Tekan P, Esc, atau Lanjut bermain untuk melanjutkan.';$('sub').textContent='';$('go').textContent='Lanjut bermain';$('sk').classList.add('hide');$('ov').classList.remove('hide');}else $('go').click();}});
 
 function over(w){
+  setEngineSound(false);
   state='over';
   if(score>best){best=score;try{localStorage.setItem('tpl-best',best)}catch(e){}}
   $('ttl').textContent=w?'Raja Vakrath hancur':'Pesawat hancur';
   $('msg').innerHTML=(w?'Armada Zorg kocar-kacir dan Bumi selamat. Kamu pahlawan skuadron Falcon.<br>':'')+'Skor kamu <b>'+score+'</b>. Skor terbaik <b>'+best+'</b>.';
   $('sub').textContent='';$('sk').classList.add('hide');
+  $('askpilot').classList.remove('hide');$('askstatus').textContent='Tekan Bertanya untuk bertanya tentang hasil misi.';
   $('go').textContent='Main lagi';
   $('ov').classList.remove('hide');hud();
 }
 
+$('askpilot').addEventListener('click',()=>{
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){$('askstatus').textContent='Browser ini belum mendukung pengenalan ucapan.';return;}
+  const rec=new SR();rec.lang='id-ID';rec.continuous=false;rec.interimResults=false;
+  $('askpilot').disabled=true;$('askstatus').textContent='Mendengarkan… ajukan pertanyaan.';
+  rec.onresult=e=>{
+    const said=e.results[0][0].transcript,q=said.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');let answer='';
+    if(/skor terbaik|nilai tertinggi|rekor/.test(q))answer='Skor terbaikmu adalah '+best+' poin. Untuk mendapat skor tinggi, terus bergerak, hindari tembakan musuh, dan ambil kapsul emas untuk memperkuat senjata.';
+    else if(/nyawa|sisa hidup|berapa hidup/.test(q))answer='Kamu memiliki '+Math.max(lives,0)+' nyawa tersisa.';
+    else if(/senjata|level senjata|tingkat senjata/.test(q))answer='Senjatamu sekarang level '+wl+'. Ambil kapsul emas yang jatuh dari musuh untuk menaikkan level senjata.';
+    else if(/bos|raja vakrath/.test(q))answer=boss?'Raja Vakrath masih memiliki sekitar '+Math.ceil(Math.max(0,boss.userData.hp)/boss.userData.max*100)+' persen energi. Terus hindari tembakannya sambil menyerang.':'Raja Vakrath belum muncul. Terus hancurkan pesawat musuh untuk memancingnya keluar.';
+    else if(/skor|nilai/.test(q))answer='Skormu saat ini '+score+' poin, dan skor terbaikmu '+best+' poin.';
+    else if(/tips|bertahan|skor tinggi|cara/.test(q))answer=lives<=1?'Nyawamu tinggal sedikit. Bergerak terus dan prioritaskan menghindari proyektil. Senjata menembak otomatis.':'Untuk bertahan dan mendapat skor tinggi, terus bergerak, hindari musuh, dan kumpulkan kapsul emas. Senjatamu menembak otomatis.';
+    else answer='Saya bisa memberi tahu skor, nyawa, level senjata, kondisi bos, atau tips. Coba tanyakan salah satunya.';
+    $('askstatus').textContent='Kamu: “'+said+'” Pilot: “'+answer+'”';
+    if('speechSynthesis' in window){speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(answer);u.lang='id-ID';u.rate=.96;speechSynthesis.speak(u);}
+  };
+  rec.onerror=e=>{$('askstatus').textContent=e.error==='no-speech'?'Tidak ada ucapan terdengar. Tekan Bertanya lalu coba lagi.':'Pengenalan ucapan gagal: '+e.error;};
+  rec.onend=()=>{$('askpilot').disabled=false;if($('askstatus').textContent.startsWith('Mendengarkan'))$('askstatus').textContent='Belum ada pertanyaan tertangkap. Tekan Bertanya untuk mencoba lagi.';};
+  try{rec.start();}catch(e){$('askpilot').disabled=false;$('askstatus').textContent='Tidak dapat membuka mikrofon. Gunakan halaman HTTPS atau localhost.';}
+});
+
 function shoot(){
+  playShotSound();
   const P=[[-.7,0],[.7,0]];
   if(wl>=2)P.push([0,0]);
   if(wl>=3)P.push([-1.1,-10],[1.1,10]);
@@ -256,6 +358,7 @@ function bossFire(){
   }
 }
 function bossDown(){
+  playBossExplosion();setEngineSound(false);
   const b=boss;state='won';score+=5000;
   [...enemies,...ebul,...pups].forEach(o=>scene.remove(o));enemies=[];ebul=[];pups=[];$('bb').classList.add('hide');
   for(let i=0;i<9;i++)setTimeout(()=>burst(new T.Vector3(b.position.x+(Math.random()-.5)*14,b.position.y+(Math.random()-.5)*5,b.position.z),'o',26),i*170);
@@ -355,6 +458,7 @@ function tick(){
   renderer.render(scene,cam);
 }
 hud();tick();
+camButton.click();
 })();
 </script>
 </body>
