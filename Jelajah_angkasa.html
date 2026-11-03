@@ -558,7 +558,8 @@
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
+    // Exposure sedikit lebih tinggi agar material PBR/GLB tetap terbaca di ruang angkasa.
+    renderer.toneMappingExposure = 1.35;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     document.body.appendChild(renderer.domElement);
@@ -566,10 +567,12 @@
     /* ═══════════════════════════════════════════
        LIGHTING
     ═══════════════════════════════════════════ */
-    const ambientLight = new THREE.AmbientLight(0x3a5070, 1.2);
+    // PointLight matahari melemah seiring jarak, jadi tambahkan cahaya dasar netral
+    // agar planet dan pesawat tidak tenggelam dalam gelap.
+    const ambientLight = new THREE.AmbientLight(0xb8c9e8, 1.8);
     scene.add(ambientLight);
 
-    const hemiLight = new THREE.HemisphereLight(0x88aadd, 0x445566, 0.8);
+    const hemiLight = new THREE.HemisphereLight(0xc8dcff, 0x667080, 1.2);
     scene.add(hemiLight);
 
     const sunLight = new THREE.PointLight(0xfff0d4, 4, 3000, 1.2);
@@ -577,11 +580,11 @@
     sunLight.castShadow = true;
     scene.add(sunLight);
 
-    const fillLight = new THREE.DirectionalLight(0x6699cc, 0.6);
+    const fillLight = new THREE.DirectionalLight(0xb8d5ff, 1.1);
     fillLight.position.set(-100, 80, 100);
     scene.add(fillLight);
 
-    const fillLight2 = new THREE.DirectionalLight(0x445588, 0.4);
+    const fillLight2 = new THREE.DirectionalLight(0x8899bb, 0.6);
     fillLight2.position.set(100, 40, -80);
     scene.add(fillLight2);
 
@@ -2892,11 +2895,11 @@
 
       // Restore space lighting
       landingLight.intensity = 0;
-      ambientLight.color.setHex(0x3a5070);
-      ambientLight.intensity = 1.2;
-      hemiLight.color.setHex(0x88aadd);
-      hemiLight.groundColor.setHex(0x445566);
-      hemiLight.intensity = 0.8;
+      ambientLight.color.setHex(0xb8c9e8);
+      ambientLight.intensity = 1.8;
+      hemiLight.color.setHex(0xc8dcff);
+      hemiLight.groundColor.setHex(0x667080);
+      hemiLight.intensity = 1.2;
 
       const worldPos = getPlanetWorldPos(targetPlanet);
       shuttle.position.set(worldPos.x, worldPos.y + targetPlanet.size + 16, worldPos.z + 15);
