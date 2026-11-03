@@ -1304,6 +1304,7 @@
         inner.rotation.x=-Math.PI/2; inner.position.set(x,-0.18,-5.57); inner.visible=false; inner.renderOrder=6; g.add(inner);
         engineFlames.push({outer,inner,phase:Math.random()*Math.PI*2});
       }
+      const addonStartIndex=g.children.length;
       // ── MESIN TURBO TAMBAHAN: 2 nacelle besar di sisi badan + 2 turbo kecil di sayap ──
       const turbines=[];
       const turboOuterMat=new THREE.MeshBasicMaterial({color:0x3da9ff,transparent:true,opacity:0.9,blending:THREE.AdditiveBlending,depthWrite:false});
@@ -1388,6 +1389,29 @@
       // Markings and service hatch add scale without toy-like color blocking.
       add(new THREE.BoxGeometry(0.42,0.025,0.32),blue,[0,0.79,-0.95]);
       add(new THREE.BoxGeometry(0.25,0.025,0.16),red,[0,0.81,-0.95]);
+      // Dua pesawat pengawal kecil bergerak dalam formasi di kanan dan kiri.
+      const escorts=[];
+      for(const side of [-1,1]){
+        const escort=new THREE.Group();
+        const body=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.23,2.3,18),white);
+        body.rotation.x=Math.PI/2; body.position.z=-0.05; escort.add(body);
+        const nose=new THREE.Mesh(new THREE.ConeGeometry(0.17,0.75,18),white);
+        nose.rotation.x=Math.PI/2; nose.position.z=1.45; escort.add(nose);
+        const wing=new THREE.Mesh(new THREE.BoxGeometry(2.2,0.09,0.8),panel);
+        wing.position.set(0,-0.03,-0.15); wing.rotation.y=side*0.12; escort.add(wing);
+        const cockpit=new THREE.Mesh(new THREE.SphereGeometry(0.18,16,12),glass);
+        cockpit.scale.set(0.8,0.55,1.5); cockpit.position.set(0,0.16,0.52); escort.add(cockpit);
+        const nozzleMesh=new THREE.Mesh(new THREE.CylinderGeometry(0.13,0.18,0.4,18),nozzle);
+        nozzleMesh.rotation.x=Math.PI/2; nozzleMesh.position.z=-1.35; escort.add(nozzleMesh);
+        const exhaust=new THREE.Mesh(new THREE.ConeGeometry(0.14,1.1,16,1,true),new THREE.MeshBasicMaterial({color:0x48caff,transparent:true,opacity:0.8,blending:THREE.AdditiveBlending,depthWrite:false}));
+        exhaust.rotation.x=-Math.PI/2; exhaust.position.z=-1.98; exhaust.renderOrder=5; escort.add(exhaust);
+        escort.position.set(side*6.3,0.2,-0.6);
+        escort.userData={side,phase:side<0?0:Math.PI,exhaust};
+        g.add(escort); escorts.push(escort);
+      }
+      g.userData.escorts=escorts;
+      // Addon sayap, lampu dan pengawal harus tetap ada saat badan GLB dipasang.
+      g.userData.modelAddons=g.children.slice(addonStartIndex);
       return g;
       function rubberMaterial(){ return new THREE.MeshStandardMaterial({color:0x15191d,roughness:0.96}); }
     }
@@ -1482,6 +1506,12 @@
       // Kipas turbin: berputar pelan saat diam, kencang saat mesin menyala
       const spin = (flamesActive ? 55 : 9) * dt;
       (shuttle.userData.turbines || []).forEach((f, i) => { f.rotation.z += i % 2 ? -spin : spin; });
+      (shuttle.userData.escorts || []).forEach((escort) => {
+        const {side,phase,exhaust}=escort.userData;
+        escort.position.y=0.2+Math.sin(time*1.8+phase)*0.16;
+        escort.position.x=side*(6.3+Math.sin(time*0.7+phase)*0.16);
+        exhaust.scale.setScalar(0.9+0.15*Math.sin(time*12+phase));
+      });
     }
 
     /* ═══════════════════════════════════════════
@@ -1812,19 +1842,15 @@
       const rearZ = new THREE.Box3().setFromObject(wrapper).min.z;
 
       // Hapus bodi pesawat bawaan; pertahankan lampu & api mesin utama (3 buah)
-      const flames = (shuttle.userData.engineFlames || []).slice(0, 3);
-      const keep = new Set();
+      const flames = shuttle.userData.engineFlames || [];
+      const keep = new Set(shuttle.userData.modelAddons || []);
       flames.forEach(f => { keep.add(f.outer); keep.add(f.inner); });
       shuttle.children.slice().forEach(ch => {
         if (!keep.has(ch) && !ch.isLight) shuttle.remove(ch);
       });
-      shuttle.userData.engineFlames = flames;
-      shuttle.userData.turbines = [];
-      shuttle.userData.blinkLights = [];
-
       // Geser api agar keluar dari bagian belakang pesawat GLB
       const dz = rearZ - (-4.46);
-      flames.forEach(f => { f.outer.position.z += dz; f.inner.position.z += dz; });
+      flames.slice(0, 3).forEach(f => { f.outer.position.z += dz; f.inner.position.z += dz; });
 
       shuttle.add(wrapper);
     });
