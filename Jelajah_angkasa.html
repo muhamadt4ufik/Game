@@ -409,6 +409,35 @@
     #mapInfo.near b { color: #7dffb2; }
     #mapLegend { margin-top: 4px; font-size: 9px; color: #6a9ec5; }
 
+
+    /* ── Tombol Buka / Tutup panel Data Ekspedisi & Dialog Alien ── */
+    #info h3, #dialog .speaker { cursor: pointer; user-select: none; -webkit-user-select: none; }
+    .fold-btn {
+      background: rgba(91, 241, 255, .12);
+      border: 1px solid rgba(91, 241, 255, .4);
+      color: #5bf1ff; border-radius: 6px;
+      padding: 3px 10px; margin-left: 10px;
+      font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600;
+      letter-spacing: 0; text-transform: none;
+      cursor: pointer; pointer-events: auto; vertical-align: middle;
+      transition: all .2s;
+    }
+    .fold-btn:hover { background: rgba(91, 241, 255, .3); color: #fff; box-shadow: 0 0 10px rgba(91, 241, 255, .3); }
+    #dialog .speaker .fold-btn { margin-left: auto; margin-right: 28px; flex-shrink: 0; }
+    #leftPanel h3 { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; user-select: none; -webkit-user-select: none; }
+    #leftPanel h3 .fold-btn { margin-left: 0; flex-shrink: 0; }
+    #leftPanel.collapsed > *:not(h3) { display: none; }
+    #leftPanel.collapsed { padding: 10px 14px; overflow: hidden; }
+    #leftPanel.collapsed h3 { margin-bottom: 0; }
+    #minimap .fold-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    #minimap .fold-head .fold-btn { margin-left: 0; flex-shrink: 0; }
+    #info.collapsed > *:not(h3) { display: none; }
+    #info.collapsed { padding: 10px 14px; overflow: hidden; }
+    #info.collapsed h3 { margin-bottom: 0; }
+    #dialog.collapsed .alien-text, #dialog.collapsed .tts-bar, #dialog.collapsed .note { display: none; }
+    #dialog.collapsed { padding: 10px 16px; animation: none; }
+    #dialog.collapsed .speaker { margin-bottom: 0; }
+
     /* ── Speed Lines Overlay ── */
     #speedLines {
       position: fixed; inset: 0; pointer-events: none; z-index: 5;
@@ -2835,6 +2864,76 @@
       updateMinimapVisibility();
     }
     minimapEl.addEventListener("click", toggleMinimap);
+
+    /* ═══════════════════════════════════════════
+       TOMBOL BUKA / TUTUP: DATA EKSPEDISI & TEKS ALIEN
+       (sama seperti Peta; klik tombol atau judul panel)
+    ═══════════════════════════════════════════ */
+    function setupFoldPanel(panel, headSelector) {
+      function sync() {
+        const btn = panel.querySelector(".fold-btn");
+        if (btn) btn.textContent = panel.classList.contains("collapsed") ? "Buka" : "Tutup";
+      }
+      function addButton() {
+        panel.classList.remove("collapsed");   // setiap konten baru, panel terbuka lagi
+        const head = panel.querySelector(headSelector);
+        if (!head || head.querySelector(".fold-btn")) return;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "fold-btn";
+        btn.title = "Buka / tutup panel";
+        head.appendChild(btn);
+        sync();
+      }
+      panel.addEventListener("click", e => {
+        if (!e.target.closest(headSelector)) return;
+        panel.classList.toggle("collapsed");
+        sync();
+      });
+      new MutationObserver(addButton).observe(panel, { childList: true });
+    }
+    setupFoldPanel(infoEl, "h3");
+    setupFoldPanel(dialogEl, ".speaker");
+
+    // ── Kotak "Tujuan Ekspedisi" ──
+    (function () {
+      const panel = document.getElementById("leftPanel");
+      const head = panel.querySelector("h3");
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "fold-btn";
+      btn.title = "Buka / tutup panel";
+      btn.textContent = "Tutup";
+      head.appendChild(btn);
+      head.addEventListener("click", () => {
+        panel.classList.toggle("collapsed");
+        btn.textContent = panel.classList.contains("collapsed") ? "Buka" : "Tutup";
+      });
+    })();
+
+    // ── Peta Permukaan (klik tombol = klik peta, jadi memakai toggleMinimap yang sudah ada) ──
+    (function () {
+      const titleEl = document.getElementById("mapTitle");
+      const wrap = document.createElement("div");
+      wrap.className = "fold-head";
+      minimapEl.insertBefore(wrap, titleEl);
+      wrap.appendChild(titleEl);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "fold-btn";
+      btn.title = "Buka / tutup peta (P)";
+      wrap.appendChild(btn);
+
+      function sync() {
+        const closed = minimapEl.classList.contains("collapsed");
+        btn.textContent = closed ? "Buka" : "Tutup";
+        const wanted = "🗺 PETA PERMUKAAN";
+        if (titleEl.textContent !== wanted) titleEl.textContent = wanted;
+      }
+      sync();
+      new MutationObserver(sync).observe(minimapEl, { attributes: true, attributeFilter: ["class"] });
+      new MutationObserver(sync).observe(titleEl, { childList: true, characterData: true, subtree: true });
+    })();
 
     function compassName(dx, dz) {
       // layar atas = Utara (arah -z, arah kamera menghadap)
