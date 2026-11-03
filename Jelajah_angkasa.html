@@ -1665,6 +1665,138 @@
     });
 
     /* ═══════════════════════════════════════════
+       GLB PENGGANTI: MATAHARI, PESAWAT, PLANET 1–8
+       (blok tambahan — kode program lainnya tidak diubah.
+        Jika file GLB gagal dimuat, model bawaan tetap dipakai.)
+    ═══════════════════════════════════════════ */
+    const GLB_MODELS = {
+      sun: "matahari.glb",
+      shuttle: "pesawat.glb",
+      // planet1 = Merkurius, planet2 = Venus, planet3 = Bumi, planet4 = Mars,
+      // planet5 = Jupiter, planet6 = Saturnus, planet7 = Uranus, planet8 = Neptunus
+      planets: ["planet1.glb", "planet2.glb", "planet3.glb", "planet4.glb",
+                "planet5.glb", "planet6.glb", "planet7.glb", "planet8.glb"]
+    };
+    const SHUTTLE_GLB_SIZE = 10;        // panjang/lebar terbesar pesawat (unit game)
+    const SHUTTLE_GLB_ROTATION_Y = 0;   // putar jika hidung pesawat tidak menghadap +Z (mis. Math.PI, Math.PI / 2)
+
+    const modelLoader = new GLTFLoader();
+    // Dukungan GLB terkompresi (Draco / Meshopt), bila file Anda memakainya
+    const decodersReady = (async () => {
+      try {
+        const { DRACOLoader } = await import("three/addons/loaders/DRACOLoader.js");
+        const draco = new DRACOLoader();
+        draco.setDecoderPath("https://www.gstatic.com/draco/versioned/decoders/1.5.6/");
+        modelLoader.setDRACOLoader(draco);
+      } catch (e) { console.warn("[GLB] DRACOLoader tidak tersedia:", e); }
+      try {
+        const { MeshoptDecoder } = await import("three/addons/libs/meshopt_decoder.module.js");
+        modelLoader.setMeshoptDecoder(MeshoptDecoder);
+      } catch (e) { console.warn("[GLB] MeshoptDecoder tidak tersedia:", e); }
+    })();
+
+    function loadGlb(file, onLoad) {
+      decodersReady.then(() => {
+        modelLoader.load(
+          file,
+          (gltf) => { try { onLoad(gltf); console.log(`[GLB] ${file} terpasang`); } catch (e) { console.warn(`[GLB] Gagal memasang ${file}:`, e); } },
+          undefined,
+          (err) => console.warn(`[GLB] Tidak dapat memuat ${file} (memakai model bawaan):`, err)
+        );
+      });
+    }
+
+    // Pusatkan model di (0,0,0) lalu skala: refDim = ukuran terbesar (default) atau terkecil
+    function fitGlb(model, targetSize, { useMin = false, rotY = 0 } = {}) {
+      model.rotation.y = rotY;
+      model.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(model);
+      const size = box.getSize(new THREE.Vector3());
+      const center = box.getCenter(new THREE.Vector3());
+      const ref = useMin ? Math.min(size.x, size.y, size.z) : Math.max(size.x, size.y, size.z);
+      const s = targetSize / (ref || 1);
+      model.scale.setScalar(s);
+      model.position.copy(center).multiplyScalar(-s);
+      const wrapper = new THREE.Group();
+      wrapper.add(model);
+      return { wrapper, size: size.clone().multiplyScalar(s) };
+    }
+
+    function setShadows(model, cast, receive) {
+      model.traverse((c) => { if (c.isMesh) { c.castShadow = cast; c.receiveShadow = receive; } });
+    }
+
+    // ── MATAHARI ──
+    loadGlb(GLB_MODELS.sun, (gltf) => {
+      const model = gltf.scene;
+      const { wrapper } = fitGlb(model, 40); // diameter 40 = radius 20, sama dengan matahari bawaan
+      model.traverse((c) => {
+        if (!c.isMesh) return;
+        c.castShadow = false;    // sumber cahaya ada di dalam matahari, jangan menghalangi
+        c.receiveShadow = false;
+        (Array.isArray(c.material) ? c.material : [c.material]).forEach((m) => {
+          if (!m || !m.emissive) return;
+          if (m.map) { m.emissiveMap = m.map; m.emissive.set(0xffffff); }
+          else if (m.color) { m.emissive.copy(m.color); }
+          m.emissiveIntensity = 1;
+          m.needsUpdate = true;
+        });
+      });
+      sun.mesh.add(wrapper);           // ikut berputar bersama sun.mesh
+      sun.mesh.material.visible = false; // sembunyikan bola kuning bawaan (glow tetap)
+    });
+
+    // ── PLANET 1–8 ──
+    planets.forEach((p, i) => {
+      loadGlb(GLB_MODELS.planets[i], (gltf) => {
+        const model = gltf.scene;
+        // Cek apakah GLB Saturnus sudah membawa cincin sendiri (bentuknya pipih lebar)
+        let opts = {};
+        if (p.hasRing) {
+          const b = new THREE.Box3().setFromObject(model).getSize(new THREE.Vector3());
+          const dims = [b.x, b.y, b.z].sort((a, c) => a - c);
+          if (dims[2] / (dims[0] || 1) > 1.5) {
+            opts = { useMin: true }; // badan planet = dimensi terkecil
+            const oldRing = p.mesh.children.find(c => c.geometry && c.geometry.type === "RingGeometry");
+            if (oldRing) oldRing.visible = false;
+          }
+        }
+        const { wrapper } = fitGlb(model, p.size * 2, opts); // diameter = 2 × radius bola bawaan
+        setShadows(model, true, true);
+        p.mesh.add(wrapper);             // ikut berputar & mengorbit bersama p.mesh
+        p.mesh.material.visible = false; // sembunyikan bola prosedural (atmosfer/bulan/cincin tetap)
+        p.mesh.castShadow = false;
+        p.mesh.receiveShadow = false;
+        p._glb = wrapper;
+      });
+    });
+
+    // ── PESAWAT ──
+    loadGlb(GLB_MODELS.shuttle, (gltf) => {
+      const model = gltf.scene;
+      const { wrapper } = fitGlb(model, SHUTTLE_GLB_SIZE, { rotY: SHUTTLE_GLB_ROTATION_Y });
+      setShadows(model, true, true);
+      const rearZ = new THREE.Box3().setFromObject(wrapper).min.z;
+
+      // Hapus bodi pesawat bawaan; pertahankan lampu & api mesin utama (3 buah)
+      const flames = (shuttle.userData.engineFlames || []).slice(0, 3);
+      const keep = new Set();
+      flames.forEach(f => { keep.add(f.outer); keep.add(f.inner); });
+      shuttle.children.slice().forEach(ch => {
+        if (!keep.has(ch) && !ch.isLight) shuttle.remove(ch);
+      });
+      shuttle.userData.engineFlames = flames;
+      shuttle.userData.turbines = [];
+      shuttle.userData.blinkLights = [];
+
+      // Geser api agar keluar dari bagian belakang pesawat GLB
+      const dz = rearZ - (-4.46);
+      flames.forEach(f => { f.outer.position.z += dz; f.inner.position.z += dz; });
+
+      shuttle.add(wrapper);
+    });
+
+    /* ═══════════════════════════════════════════
        ALIEN (Scary, unique per planet)
     ═══════════════════════════════════════════ */
     function makeAlien(skinColor = 0x59665b, eyeColor = 0x8aa99a, variant = 0) {
