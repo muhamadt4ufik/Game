@@ -1726,6 +1726,26 @@
       model.traverse((c) => { if (c.isMesh) { c.castShadow = cast; c.receiveShadow = receive; } });
     }
 
+    // Cerahkan material GLB: kurangi efek logam (gelap tanpa env map) + tambah cahaya sendiri
+    // maxMetal: batas metalness, minRough: batas minimal roughness, glow: kekuatan cahaya sendiri (0–1)
+    function brightenGlb(model, { maxMetal = 0.1, minRough = 0.7, glow = 0.45 } = {}) {
+      model.traverse((c) => {
+        if (!c.isMesh) return;
+        (Array.isArray(c.material) ? c.material : [c.material]).forEach((m) => {
+          if (!m || !m.isMeshStandardMaterial) return;
+          m.metalness = Math.min(m.metalness ?? 0, maxMetal);
+          m.roughness = Math.max(m.roughness ?? 1, minRough);
+          m.metalnessMap = null;
+          m.roughnessMap = null;
+          if (m.emissiveMap == null && m.map) m.emissiveMap = m.map;
+          if (m.emissiveMap) m.emissive.setScalar(glow);
+          else if (m.color) m.emissive.copy(m.color).multiplyScalar(glow);
+          m.emissiveIntensity = 1;
+          m.needsUpdate = true;
+        });
+      });
+    }
+
     // ── MATAHARI ──
     loadGlb(GLB_MODELS.sun, (gltf) => {
       const model = gltf.scene;
@@ -1734,13 +1754,21 @@
         if (!c.isMesh) return;
         c.castShadow = false;    // sumber cahaya ada di dalam matahari, jangan menghalangi
         c.receiveShadow = false;
-        (Array.isArray(c.material) ? c.material : [c.material]).forEach((m) => {
-          if (!m || !m.emissive) return;
-          if (m.map) { m.emissiveMap = m.map; m.emissive.set(0xffffff); }
-          else if (m.color) { m.emissive.copy(m.color); }
-          m.emissiveIntensity = 1;
-          m.needsUpdate = true;
-        });
+        const conv = (m) => {
+          if (!m) return m;
+          const tex = m.emissiveMap || m.map || null;
+          let col = m.color ? m.color.clone() : new THREE.Color(0xffffff);
+          if (!tex && (col.r + col.g + col.b) / 3 < 0.35) col.set(0xffc233); // warna terlalu gelap → kuning matahari
+          if (tex) col.set(0xffffff);
+          const basic = new THREE.MeshBasicMaterial({
+            map: tex, color: col,
+            vertexColors: !!(c.geometry && c.geometry.attributes && c.geometry.attributes.color && !tex),
+            transparent: m.transparent, opacity: m.opacity, side: m.side,
+            toneMapped: false            // warna asli, tidak diredupkan tone mapping
+          });
+          return basic;
+        };
+        c.material = Array.isArray(c.material) ? c.material.map(conv) : conv(c.material);
       });
       sun.mesh.add(wrapper);           // ikut berputar bersama sun.mesh
       sun.mesh.material.visible = false; // sembunyikan bola kuning bawaan (glow tetap)
@@ -1763,6 +1791,7 @@
         }
         const { wrapper } = fitGlb(model, p.size * 2, opts); // diameter = 2 × radius bola bawaan
         setShadows(model, true, true);
+        brightenGlb(model, { maxMetal: 0.05, minRough: 0.75, glow: 0.4 });
         p.mesh.add(wrapper);             // ikut berputar & mengorbit bersama p.mesh
         p.mesh.material.visible = false; // sembunyikan bola prosedural (atmosfer/bulan/cincin tetap)
         p.mesh.castShadow = false;
@@ -1776,6 +1805,7 @@
       const model = gltf.scene;
       const { wrapper } = fitGlb(model, SHUTTLE_GLB_SIZE, { rotY: SHUTTLE_GLB_ROTATION_Y });
       setShadows(model, true, true);
+      brightenGlb(model, { maxMetal: 0.3, minRough: 0.45, glow: 0.3 });
       const rearZ = new THREE.Box3().setFromObject(wrapper).min.z;
 
       // Hapus bodi pesawat bawaan; pertahankan lampu & api mesin utama (3 buah)
