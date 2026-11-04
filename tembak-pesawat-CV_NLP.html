@@ -21,6 +21,9 @@ canvas{display:block;width:100%;height:100%}
 #card b{color:var(--ink)}
 button{margin-top:16px;font:inherit;font-weight:700;font-size:18px;padding:12px 30px;background:var(--hot);color:#1a0c04;border:0;border-radius:4px 14px 4px 14px;cursor:pointer}
 button:focus-visible{outline:3px solid var(--cool);outline-offset:3px}
+.help-list{margin:14px 0 4px;padding:0;list-style:none;text-align:left;color:var(--dim);line-height:1.55}
+.help-list li{margin:8px 0;padding-left:30px;position:relative}
+.help-list li b{position:absolute;left:0;color:var(--hot)}
 .hide{display:none!important}
 .ghost{background:transparent;color:var(--dim);border:1px solid var(--dim);font-size:15px;margin-left:8px}
 #bb{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 62px);transform:translateX(-50%);width:min(420px,80vw);text-align:center;font-weight:700;color:var(--hot);pointer-events:none}
@@ -46,6 +49,7 @@ canvas#handoverlay{position:fixed;right:14px;bottom:94px;width:160px;max-width:3
 <p id="msg"></p>
 <p id="sub"></p>
 <button id="go">Lanjut</button><button id="sk" class="ghost">Lewati cerita</button>
+<button id="how" class="ghost hide">Cara Main</button>
 </div></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -272,7 +276,17 @@ function story(){const s=ST[si];$('ttl').textContent=s[0];$('msg').textContent=s
   if('speechSynthesis' in window){speechSynthesis.cancel();const u=new SpeechSynthesisUtterance([s[0],s[1],s[2]||''].filter(Boolean).join('. '));u.lang='id-ID';u.rate=.95;u.pitch=1;speechSynthesis.speak(u);}
 }
 story();
-$('go').addEventListener('click',()=>{if(state==='paused'){state='play';setEngineSound(true);$('ov').classList.add('hide');return;}if(state==='menu'&&si<ST.length-1){si++;story();}else start();});
+const howButton=$('how');let howOpen=false,introHelp=true;
+function showHow(){
+  howOpen=true;
+  $('ttl').textContent='Cara Main';
+  $('msg').innerHTML='';
+  $('sub').innerHTML='<ol class="help-list"><li><b>1.</b> Aktifkan kamera dan izinkan akses kamera saat diminta.</li><li><b>2.</b> Rapatkan ujung telunjuk dan ibu jari untuk memilih.</li><li><b>3.</b> Gerakkan tangan untuk mengarahkan pesawat.</li><li><b>4.</b> Klik <b>Bertanya</b> untuk bertanya seputar game.</li></ol>';
+  $('go').textContent='Mulai bermain';$('go').classList.toggle('hide',introHelp);$('sk').classList.add('hide');howButton.classList.add('hide');
+}
+howButton.addEventListener('click',showHow);
+$('go').addEventListener('click',()=>{if(state==='paused'){state='play';setEngineSound(true);$('ov').classList.add('hide');return;}if(howOpen){howOpen=false;if(introHelp){introHelp=false;$('go').classList.remove('hide');story();}else start();return;}if(state==='menu'&&si<ST.length-1){si++;story();}else if(state==='menu'){showHow();}else start();});
+showHow();
 $('sk').addEventListener('click',()=>{si=ST.length-1;story();});
 addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&(state==='menu'||state==='over')&&document.activeElement!==$('go')&&document.activeElement!==$('sk')&&document.activeElement!==$('askpilot')){$('go').click();}});
 addEventListener('keydown',e=>{if((e.key==='Escape'||e.key.toLowerCase()==='p')&&(state==='play'||state==='paused')){if(state==='play'){state='paused';setEngineSound(false);$('ttl').textContent='Permainan dijeda';$('msg').textContent='Tekan P, Esc, atau Lanjut bermain untuk melanjutkan.';$('sub').textContent='';$('go').textContent='Lanjut bermain';$('sk').classList.add('hide');$('ov').classList.remove('hide');}else $('go').click();}});
